@@ -100,9 +100,7 @@ export async function extractPDFText(
     warnings.push(`Extracted text is very short (${text.length} chars) - PDF may be mostly images`);
   }
 
-  const numPages = parser.options?.data
-    ? undefined
-    : (await parser.getInfo({})).numpages ?? 0;
+  const numPages = parser.doc?.numPages ?? 0;
 
   return {
     text,

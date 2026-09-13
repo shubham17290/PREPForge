@@ -77,6 +77,15 @@ export function LoginPage() {
         )}
         <Button type="submit" loading={loading}>Log in</Button>
       </form>
+      <div className="mt-4 rounded-md2 border border-accent/40 bg-accent-soft px-3 py-2.5 text-sm">
+        <p className="font-semibold text-accent-ink">Demo access</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted">
+          Seed account for the demo:
+          <br />
+          <code className="font-mono font-medium text-accent-ink">dev-seed@gate-pyq.local</code> ·{" "}
+          <code className="font-mono font-medium text-accent-ink">dev-passw0rd-1</code>
+        </p>
+      </div>
       <div className="mt-4 flex items-center justify-between text-sm">
         <Link href="/reset-password" className="text-muted hover:text-primary">Forgot password?</Link>
         <Link href="/register" className="font-medium text-primary">Create account</Link>

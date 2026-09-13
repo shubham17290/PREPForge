@@ -140,15 +140,20 @@ export function MistakesPage() {
         <ul className="grid gap-3 lg:grid-cols-2">
           {(details.data ?? []).map((question) => (
             <li key={question.id}>
-              <Card className="h-full">
-                <p className="line-clamp-3">{question.body}</p>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  <Badge tone="info">{question.type_code.toUpperCase()}</Badge>
-                  <Badge tone="neutral">GATE {question.gate_year}</Badge>
-                  <Badge tone={difficultyTone(question.difficulty)}>{question.difficulty}</Badge>
-                  {question.topic && <Badge tone="neutral">{question.topic.name}</Badge>}
-                </div>
-              </Card>
+              <Link href={`/questions/${question.id}`} className="group block h-full">
+                <Card className="h-full transition-shadow group-hover:shadow-med">
+                  <p className="line-clamp-3">{question.body}</p>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    <Badge tone="info">{question.type_code.toUpperCase()}</Badge>
+                    <Badge tone="neutral">GATE {question.gate_year}</Badge>
+                    <Badge tone={difficultyTone(question.difficulty)}>{question.difficulty}</Badge>
+                    {question.topic && <Badge tone="neutral">{question.topic.name}</Badge>}
+                  </div>
+                  <span className="mt-3 inline-flex touch-target items-center gap-1 text-sm font-medium text-[color:var(--accent)]">
+                    Open question →
+                  </span>
+                </Card>
+              </Link>
             </li>
           ))}
         </ul>
