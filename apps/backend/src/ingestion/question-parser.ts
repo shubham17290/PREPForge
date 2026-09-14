@@ -148,7 +148,8 @@ function extractOptions(text: string, type: ParsedQuestion['type']): ParsedOptio
   }
 
   const options: ParsedOption[] = [];
-  const lines = text.split('\n');
+  const textNormalized = normalizeDashes(text);
+  const lines = textNormalized.split('\n');
   let label: string | null = null;
   let bodyParts: string[] = [];
 
@@ -311,15 +312,43 @@ function cleanBodyText(text: string, questionNumber: number): string {
   return body.trim();
 }
 
+const DASH_CODES = [8208, 8209, 8210, 8211, 8212, 8213, 8722];
+function normalizeDashes(value: string): string {
+  let out = value;
+  for (const c of DASH_CODES) { out = out.split(String.fromCharCode(c)).join('-'); }
+  return out;
+}
+function isRangeDirective(value: string): boolean {
+  const t = normalizeDashes(value).trim().toLowerCase();
+  if (t.indexOf('q.') !== 0) return false;
+  const ci = t.indexOf('carry');
+  if (ci < 0) return false;
+  const head = t.slice(0, ci);
+  if (head.indexOf('-') < 0) return false;
+  if (head.indexOf('q.', 2) < 0) return false;
+  return true;
+}
+function isPageNoise(value: string): boolean {
+  const t = value.trim().toLowerCase();
+  if (t.indexOf('page ') === 0 && t.indexOf(' of ') > 4) return true;
+  if (t.indexOf('--') === 0) return true;
+  if (/^\d+\s+of\s+\d+\s*-/.test(t)) return true;
+  return false;
+}
 function isHeaderLine(line: string): boolean {
+  const normalized = normalizeDashes(line);
   for (const pattern of HEADER_PATTERNS) {
-    if (pattern.test(line)) return true;
+    if (pattern.test(normalized)) return true;
   }
+  if (isRangeDirective(line)) return true;
+  if (isPageNoise(line)) return true;
   return false;
 }
 
 export function detectQuestionBoundaries(text: string): QuestionBoundary[] {
-  const lines = text.split('\n');
+  const textNormalized = normalizeDashes(text);
+  const lines = textNormalized.split('\n');
+  void QUESTION_RANGE_PATTERN;
   if (lines.length === 0) return [];
 
   // 1) Group lines into page segments using the trailing "— N of M —" separators.
@@ -354,7 +383,8 @@ export function detectQuestionBoundaries(text: string): QuestionBoundary[] {
       const trimmed = lines[i].trim();
       if (trimmed.length === 0) continue;
       if (isHeaderLine(trimmed)) continue;
-      if (QUESTION_RANGE_PATTERN.test(trimmed)) continue;
+      if (isRangeDirective(trimmed)) continue;
+      if (isPageNoise(trimmed)) continue;
 
       lastMeaningfulIndex = i;
 
@@ -399,6 +429,24 @@ export function detectQuestionBoundaries(text: string): QuestionBoundary[] {
   const dedupedStarts: Array<{ questionNumber: number; startIndex: number }> = [];
   for (const candidate of starts) {
     const previous = dedupedStarts[dedupedStarts.length - 1];
+      if (inlineMarkers.length > 0) {
+        for (const marker of inlineMarkers) {
+          starts.push({ questionNumber: marker.questionNumber, startIndex: marker.lineIndex });
+        }
+        if (
+          footerCandidate !== null &&
+          firstContentIndex !== null &&
+          footerCandidate.lineIndex < firstContentIndex
+        ) {
+          starts.push({ questionNumber: footerCandidate.questionNumber, startIndex: firstContentIndex });
+        }
+      } else if (
+        footerCandidate !== null &&
+        footerCandidate.lineIndex === lastMeaningfulIndex &&
+        firstContentIndex !== null
+      ) {
+        starts.push({ questionNumber: footerCandidate.questionNumber, startIndex: firstContentIndex });
+      }
     if (previous && previous.questionNumber === candidate.questionNumber) continue;
     dedupedStarts.push(candidate);
   }
@@ -409,6 +457,7 @@ export function detectQuestionBoundaries(text: string): QuestionBoundary[] {
   for (let i = 0; i < dedupedStarts.length; i++) {
     const startIndex = dedupedStarts[i].startIndex;
     const endIndex = i < dedupedStarts.length - 1 ? dedupedStarts[i + 1].startIndex : lines.length;
+BLANKREPLACED2
 
     const contentLines: string[] = [];
     for (let j = startIndex; j < endIndex; j++) {

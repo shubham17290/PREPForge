@@ -32,7 +32,7 @@ function extractMarksRangesFromText(text: string): MarksRange[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const trimmed = line.trim();
+    const trimmed = normalizePipelineDashes(line).trim();
     if (!trimmed.toLowerCase().includes('carry')) continue;
 
     let match = trimmed.match(/Q\.\s*(\d+)\s*[–-]\s*Q\.\s*(\d+)\s+Carry\s+(one|two)\s+marks?(?:\s+[Ee]ach)?/i);

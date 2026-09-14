@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 
-import { runPilotPipeline, printPipelineSummary } from '../src/ingestion/pipeline.js';
+import { runIngestionPipeline, printPipelineSummary } from '../src/ingestion/pipeline.js';
 
 async function main() {
+  const onlyArg = process.argv[2];
+  const onlyFile = onlyArg && !onlyArg.startsWith('-') ? onlyArg : undefined;
   console.log('=== GATE PYQ PDF Ingestion Pipeline ===');
-  console.log('Phase 12F.2 - Pilot Run\n');
+  if (onlyFile) console.log(`Single-file run: ${onlyFile}\n`);
+  else console.log('Phase 12F.2 - Pilot Run\n');
 
   try {
-    const result = await runPilotPipeline();
+    const result = onlyFile
+      ? await runIngestionPipeline(onlyFile)
+      : await (await import('../src/ingestion/pipeline.js')).runPilotPipeline();
     printPipelineSummary(result);
 
     if (result.report) {
