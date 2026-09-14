@@ -58,10 +58,12 @@ const HEADER_PATTERNS = [
 ];
 
 const OPTION_PATTERNS = [
-  /\(\s*([A-D])\s*\)\s*(.+)$/m,
-  /\[\s*([A-D])\s*\]\s*(.+)$/m,
-  /^([A-D])\.\s*(.+)$/m,
-  /^([A-D])\s+(.+)$/m,
+  // "(A) body" — label in parens at line start, followed by the option body.
+  /^\s*\(\s*([A-D])\s*\)\s*(.+)$/m,
+  // "[A] body" — label in brackets at line start.
+  /^\s*\[\s*([A-D])\s*\]\s*(.+)$/m,
+  // "A. body" — label followed by a period then the body.
+  /^\s*([A-D])\.\s+(.+)$/m,
 ];
 
 // A lone "(A)" on a single line denotes an option label with no inline body (the
@@ -115,6 +117,19 @@ const NAT_INDICATORS = [
 function detectQuestionType(text: string): 'mcq' | 'msq' | 'nat' | 'unknown' {
   const lowerText = text.toLowerCase();
 
+  // A question that presents genuine labeled (A)-(D) choices is MCQ/MSQ — even if its
+  // stem also contains a fill-in blank. Count real option-label *lines*: a line that
+  // starts (modulo indentation) with "(A)"/"[A]"/"A." . This deliberately excludes
+  // mid-line matrix notation like "det(A)" or "(A, B)" and stem sentences like
+  // "A 4 kilobyte...", which a bare "(A)" anywhere would wrongly match.
+  const labelCount = (text.match(/^\s*(\(\s*[A-D]\s*\)|\[\s*[A-D]\s*\]|[A-D]\.)/gm) || []).length;
+  if (labelCount >= 2) {
+    for (const indicator of MSQ_INDICATORS) {
+      if (indicator.test(lowerText)) return 'msq';
+    }
+    return 'mcq';
+  }
+
   for (const indicator of NAT_INDICATORS) {
     if (indicator.test(lowerText)) return 'nat';
   }
@@ -123,17 +138,15 @@ function detectQuestionType(text: string): 'mcq' | 'msq' | 'nat' | 'unknown' {
     if (indicator.test(lowerText)) return 'msq';
   }
 
-  const optionCount = (text.match(/\([A-D]\)/g) || []).length;
-  if (optionCount >= 2) return 'mcq';
-
   return 'unknown';
 }
 
-function extractStandaloneLabelOptions(text: string): ParsedOption[] {
-  // Handles options whose label "(A)" sits on its own line, with the option body spread
-  // across the following lines until the next label or a page header/separator.
-  // Observed in GATE questions whose options are diagrams/trees (e.g. the Q36
-  // activation-tree options): "(A)" on one line, then "main\nf1 f2 f3\n...".
+function extractOptions(text: string, type: ParsedQuestion['type']): ParsedOption[] {
+  // NAT questions carry no labeled choices.
+  if (type === 'nat') {
+    return [];
+  }
+
   const options: ParsedOption[] = [];
   const lines = text.split('\n');
   let label: string | null = null;
@@ -141,7 +154,10 @@ function extractStandaloneLabelOptions(text: string): ParsedOption[] {
 
   const flush = () => {
     if (label !== null) {
-      options.push({ label, body: bodyParts.join('\n').trim(), isCorrect: null });
+      const body = bodyParts.join('\n').trim();
+      if (body.length > 0) {
+        options.push({ label, body, isCorrect: null });
+      }
       label = null;
       bodyParts = [];
     }
@@ -149,21 +165,24 @@ function extractStandaloneLabelOptions(text: string): ParsedOption[] {
 
   for (const rawLine of lines) {
     const trimmed = rawLine.trim();
-    const match = trimmed.match(STANDALONE_OPTION_LABEL_PATTERN);
+
+    // Does this line start a new option label? Handles "(A) body", "(A)", "[A] body",
+    // and "A. body". Anchored to line start so mid-line tokens like "det(A)" or
+    // stem sentences like "A 4 kilobyte..." are never treated as labels.
+    const match = trimmed.match(/^\s*(?:\(\s*([A-D])\s*\)|[\[][A-D][]]\s*|([A-D])\.\s*)(.*)$/);
     if (match) {
       flush();
-      const nextLabel = match[0].replace(/^\s*\(|\)\s*$/g, '').toUpperCase();
-      if (options.some(o => o.label === nextLabel)) {
-        // duplicate label — not a new option, keep accumulating into nothing
-        label = null;
-      } else {
-        label = nextLabel;
-        bodyParts = [];
+      label = (match[1] || match[2]).toUpperCase();
+      const inlineBody = (match[3] || '').trim();
+      if (inlineBody.length > 0) {
+        bodyParts.push(inlineBody);
       }
       continue;
     }
+
+    // Not a label line — collect as body only while an option is open.
     if (label !== null) {
-      if (trimmed.length === 0) continue; // blanks don't terminate an option body
+      if (trimmed.length === 0) continue; // blank lines don't terminate a body
       if (isHeaderLine(trimmed) || PAGE_SEPARATOR_PATTERN.test(trimmed)) {
         flush();
         continue;
@@ -171,61 +190,8 @@ function extractStandaloneLabelOptions(text: string): ParsedOption[] {
       bodyParts.push(trimmed);
     }
   }
+
   flush();
-  return options;
-}
-
-function extractOptions(text: string): ParsedOption[] {
-  const options: ParsedOption[] = [];
-  const lines = text.split('\n');
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    for (const pattern of OPTION_PATTERNS) {
-      const match = trimmed.match(pattern);
-      if (match) {
-        const label = match[1];
-        const body = match[2].trim();
-        if (body.length > 0) {
-          options.push({ label, body, isCorrect: null });
-        }
-        break;
-      }
-    }
-  }
-
-  if (options.length < 2) {
-    const altPatterns = [
-      /\(([A-D])\)\s*([^()\n]{5,})/g,
-      /([A-D])\)\s*([^()\n]{5,})/g,
-    ];
-    for (const pattern of altPatterns) {
-      const matches = text.matchAll(pattern);
-      for (const match of matches) {
-        if (match[1] && match[2] && match[2].trim().length > 0) {
-          const label = match[1];
-          const body = match[2].trim();
-          if (!options.some(o => o.label === label)) {
-            options.push({ label, body, isCorrect: null });
-          }
-        }
-      }
-    }
-  }
-
-  // Last resort: an option layout where each "(A)"/"(B)"/... label occupies its own
-  // line and the body runs across the following lines. This is only attempted when the
-  // inline passes above failed to find >= 2 options, so every normal inline-option
-  // question (which already has >= 2 options) is left completely untouched.
-  if (options.length < 2) {
-    const standaloneOptions = extractStandaloneLabelOptions(text);
-    for (const option of standaloneOptions) {
-      if (!options.some(existing => existing.label === option.label)) {
-        options.push(option);
-      }
-    }
-  }
-
   return options;
 }
 
@@ -483,7 +449,7 @@ export function parseQuestion(
     warnings.push('Could not determine question type (MCQ/MSQ/NAT)');
   }
 
-  const options = extractOptions(text);
+  const options = extractOptions(text, type);
   if ((type === 'mcq' || type === 'msq') && options.length < 2) {
     warnings.push(`Expected at least 2 options for ${type.toUpperCase()}, found ${options.length}`);
   }
