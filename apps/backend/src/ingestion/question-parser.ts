@@ -64,6 +64,10 @@ const OPTION_PATTERNS = [
   /^([A-D])\s+(.+)$/m,
 ];
 
+// A lone "(A)" on a single line denotes an option label with no inline body (the
+// body follows on subsequent lines) — e.g. GATE options drawn as diagrams/trees.
+const STANDALONE_OPTION_LABEL_PATTERN = /^\s*\([A-D]\)\s*$/;
+
 const ANSWER_KEY_PATTERNS = [
   /answer\s*[:=]\s*([A-D])/i,
   /correct\s*(?:answer|option)\s*[:=]\s*([A-D])/i,
@@ -125,6 +129,52 @@ function detectQuestionType(text: string): 'mcq' | 'msq' | 'nat' | 'unknown' {
   return 'unknown';
 }
 
+function extractStandaloneLabelOptions(text: string): ParsedOption[] {
+  // Handles options whose label "(A)" sits on its own line, with the option body spread
+  // across the following lines until the next label or a page header/separator.
+  // Observed in GATE questions whose options are diagrams/trees (e.g. the Q36
+  // activation-tree options): "(A)" on one line, then "main\nf1 f2 f3\n...".
+  const options: ParsedOption[] = [];
+  const lines = text.split('\n');
+  let label: string | null = null;
+  let bodyParts: string[] = [];
+
+  const flush = () => {
+    if (label !== null) {
+      options.push({ label, body: bodyParts.join('\n').trim(), isCorrect: null });
+      label = null;
+      bodyParts = [];
+    }
+  };
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    const match = trimmed.match(STANDALONE_OPTION_LABEL_PATTERN);
+    if (match) {
+      flush();
+      const nextLabel = match[0].replace(/^\s*\(|\)\s*$/g, '').toUpperCase();
+      if (options.some(o => o.label === nextLabel)) {
+        // duplicate label — not a new option, keep accumulating into nothing
+        label = null;
+      } else {
+        label = nextLabel;
+        bodyParts = [];
+      }
+      continue;
+    }
+    if (label !== null) {
+      if (trimmed.length === 0) continue; // blanks don't terminate an option body
+      if (isHeaderLine(trimmed) || PAGE_SEPARATOR_PATTERN.test(trimmed)) {
+        flush();
+        continue;
+      }
+      bodyParts.push(trimmed);
+    }
+  }
+  flush();
+  return options;
+}
+
 function extractOptions(text: string): ParsedOption[] {
   const options: ParsedOption[] = [];
   const lines = text.split('\n');
@@ -159,6 +209,19 @@ function extractOptions(text: string): ParsedOption[] {
             options.push({ label, body, isCorrect: null });
           }
         }
+      }
+    }
+  }
+
+  // Last resort: an option layout where each "(A)"/"(B)"/... label occupies its own
+  // line and the body runs across the following lines. This is only attempted when the
+  // inline passes above failed to find >= 2 options, so every normal inline-option
+  // question (which already has >= 2 options) is left completely untouched.
+  if (options.length < 2) {
+    const standaloneOptions = extractStandaloneLabelOptions(text);
+    for (const option of standaloneOptions) {
+      if (!options.some(existing => existing.label === option.label)) {
+        options.push(option);
       }
     }
   }

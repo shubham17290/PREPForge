@@ -1,0 +1,1897 @@
+{
+  "source": {
+    "file": "2023_CS.pdf",
+    "exam_year": 2023,
+    "paper_number": null,
+    "shift": null
+  },
+  "questions": [
+    {
+      "question_number": 1,
+      "type": "nat",
+      "body": "We reached the station late, and _______ missed the train.",
+      "options": [
+        {
+          "label": "A",
+          "body": "near",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "nearly",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "utterly",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "mostly",
+          "is_correct": null
+        }
+      ],
+      "answer": {
+        "type": "numeric",
+        "value": null,
+        "raw_text": "[blank]"
+      },
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": []
+    },
+    {
+      "question_number": 2,
+      "type": "nat",
+      "body": "Kind : _______ : : Often : Frequently\n(By word meaning)",
+      "options": [
+        {
+          "label": "A",
+          "body": "Mean",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "Type",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "Cruel",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "Kindly",
+          "is_correct": null
+        }
+      ],
+      "answer": {
+        "type": "numeric",
+        "value": null,
+        "raw_text": "[blank]"
+      },
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": []
+    },
+    {
+      "question_number": 3,
+      "type": "mcq",
+      "body": "A series of natural numbers 𝐹1, 𝐹2, 𝐹3, 𝐹4, 𝐹5, 𝐹6, 𝐹7, … obeys 𝐹𝑛+1 = 𝐹𝑛 + 𝐹𝑛−1\nfor all integers 𝑛 ≥ 2 .\nIf 𝐹6 = 37, and 𝐹7 = 60, then what is 𝐹1 ?",
+      "options": [
+        {
+          "label": "A",
+          "body": "4",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "5",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "8",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "9",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 4,
+      "type": "mcq",
+      "body": "A survey for a certain year found that 90% of pregnant women received medical\ncare at least once before giving birth. Of these women, 60% received medical care\nfrom doctors, while 40% received medical care from other healthcare providers.\nGiven this information, which one of the following statements can be inferred with\ncertainty?",
+      "options": [
+        {
+          "label": "A",
+          "body": "More than half of the pregnant women received medical care at least once from a",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "Less than half of the pregnant women received medical care at least once from a",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "More than half of the pregnant women received medical care at most once from a",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "Less than half of the pregnant women received medical care at most once from a",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 5,
+      "type": "mcq",
+      "body": "Looking at the surface of a smooth 3-dimensional object from the outside, which\none of the following options is TRUE?",
+      "options": [
+        {
+          "label": "A",
+          "body": "The surface of the object must be concave everywhere.",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "The surface of the object must be convex everywhere.",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "The surface of the object may be concave in some places and convex in other places.",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "The object can have edges, but no corners.",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 6,
+      "type": "mcq",
+      "body": "The country of Zombieland is in distress since more than 75% of its working\npopulation is suffering from serious health issues. Studies conducted by competent\nhealth experts concluded that a complete lack of physical exercise among its\nworking population was one of the leading causes of their health issues. As one of\nthe measures to address the problem, the Government of Zombieland has decided\nto provide monetary incentives to those who ride bicycles to work.\nBased only on the information provided above, which one of the following\nstatements can be logically inferred with certainty?",
+      "options": [
+        {
+          "label": "A",
+          "body": "All the working population of Zombieland will henceforth ride bicycles to work.",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "Riding bicycles will ensure that all of the working population of Zombieland is free",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "The health experts suggested to the Government of Zombieland to declare riding",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "The Government of Zombieland believes that riding bicycles is a form of physical",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 7,
+      "type": "mcq",
+      "body": "Consider two functions of time (𝑡),\n𝑓(𝑡) = 0.01 𝑡2\n𝑔(𝑡) = 4 𝑡\nwhere 0 < 𝑡 < ∞.\nNow consider the following two statements:\n(i) For some 𝑡 > 0, 𝑔(𝑡) > 𝑓(𝑡).\n(ii) There exists a 𝑇, such that 𝑓(𝑡) > 𝑔(𝑡) for all 𝑡 > 𝑇.\nWhich one of the following options is TRUE?",
+      "options": [
+        {
+          "label": "A",
+          "body": "only (i) is correct",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "only (ii) is correct",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "both (i) and (ii) are correct",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "neither (i) nor (ii) is correct",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 8,
+      "type": "mcq",
+      "body": "Which one of the following sentence sequences creates a coherent narrative?\n(i) Once on the terrace, on her way to her small room in the corner, she\nnotices the man right away.\n(ii) She begins to pant by the time she has climbed all the stairs.\n(iii) Mina has bought vegetables and rice at the market, so her bags are\nheavy.\n(iv) He was leaning against the parapet, watching the traffic below.",
+      "options": [
+        {
+          "label": "A",
+          "body": "(i), (ii), (iv), (iii)",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "(ii), (iii), (i), (iv)",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "(iv), (ii), (i), (iii)",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "(iii), (ii), (i), (iv)",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 9,
+      "type": "mcq",
+      "body": "( )\t\nf x\t and\t( )\t\ng y\t are functions of x and y, respectively, and\t( ) \t( )\t\nf x g y\t=\t for all real\nvalues of 𝑥 and 𝑦. Which one of the following options is necessarily TRUE for all\nx and y?",
+      "options": [
+        {
+          "label": "A",
+          "body": "( )",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "( ) ( )",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "( )",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "( ) ( ) ( ) ( )",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 10,
+      "type": "mcq",
+      "body": "Which one of the options best describes the transformation of the 2-dimensional\nfigure P to Q, and then to R, as shown?",
+      "options": [
+        {
+          "label": "A",
+          "body": "Operation 1: A clockwise rotation by 90º about an axis perpendicular to the plane",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "Operation 1: A counter clockwise rotation by 90º about an axis perpendicular to",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "Operation 1: A clockwise rotation by 90º about an axis perpendicular to the plane",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "Operation 1: A counter clockwise rotation by 180º about an axis perpendicular to",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 11,
+      "type": "mcq",
+      "body": "Consider the following statements regarding the front-end and back-end of a\ncompiler.\nS1: The front-end includes phases that are independent of the target hardware.\nS2: The back-end includes phases that are specific to the target hardware.\nS3: The back-end includes phases that are specific to the programming language\nused in the source code.\nIdentify the",
+      "options": [
+        {
+          "label": "A",
+          "body": "Only S1 is TRUE.",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "Only S1 and S2 are TRUE.",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "S1, S2, and S3 are all TRUE.",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "Only S1 and S3 are TRUE.",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 12,
+      "type": "mcq",
+      "body": "Which one of the following sequences when stored in an array at locations\nA[1], . . . , A[10] forms a max-heap?",
+      "options": [
+        {
+          "label": "A",
+          "body": "23, 17, 10, 6, 13, 14, 1, 5, 7, 12",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "23, 17, 14, 7, 13, 10, 1, 5, 6, 12",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "23, 17, 14, 6, 13, 10, 1, 5, 7, 15",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "23, 14, 17, 1, 10, 13, 16, 12, 7, 5",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 13,
+      "type": "mcq",
+      "body": "Let SLLdel be a function that deletes a node in a singly-linked list given a pointer\nto the node and a pointer to the head of the list. Similarly, let DLLdel be another\nfunction that deletes a node in a doubly-linked list given a pointer to the node and\na pointer to the head of the list.\nLet n denote the number of nodes in each of the linked lists. \tWhich one of the\nfollowing choices is TRUE about the worst-case time complexity of SLLdel and\nDLLdel?",
+      "options": [
+        {
+          "label": "A",
+          "body": "SLLdel is O(1) and DLLdel is O(n)",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "Both SLLdel and DLLdel are O(log(n))",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "Both SLLdel and DLLdel are O(1)",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "SLLdel is O(n) and DLLdel is O(1)",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 14,
+      "type": "mcq",
+      "body": "Consider the Deterministic Finite-state Automaton (DFA) A shown below. \tThe\nDFA runs on the alphabet {0, 1}, and has the set of states {s, p, q, r}, with s being\nthe start state and p being the only final state.\n1\n0 \t0\n0\n0,1\n1\n1\ns \tp \tq\nr\nWhich one of the following regular expressions",
+      "options": [
+        {
+          "label": "A",
+          "body": "1(0∗11)∗",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "0(0 + 1)∗",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "1(0 + 11)∗",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "1(110∗)∗",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 15,
+      "type": "mcq",
+      "body": "The Lucas sequence Ln is defined by the recurrence relation:\nLn = Ln−1 + Ln−2, \tfor \tn ≥ 3,\nwith L1 = 1 and L2 = 3.\nWhich one of the options given is TRUE?",
+      "options": [
+        {
+          "label": "A",
+          "body": "Ln =",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "Ln =",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "Ln =",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "Ln =",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 16,
+      "type": "mcq",
+      "body": "Which one of the options given below refers to the degree (or arity) of a relation in\nrelational database systems?",
+      "options": [
+        {
+          "label": "A",
+          "body": "Number of attributes of its relation schema.",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "Number of tuples stored in the relation.",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "Number of entries in the relation.",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "Number of distinct domains of its relation schema.",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 17,
+      "type": "mcq",
+      "body": "Suppose two hosts are connected by a point-to-point link and they are configured\nto use Stop-and-Wait protocol for reliable data transfer. Identify in which one of\nthe following scenarios, the utilization of the link is the lowest.",
+      "options": [
+        {
+          "label": "A",
+          "body": "Longer link length and lower transmission rate",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "Longer link length and higher transmission rate",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "Shorter link length and lower transmission rate",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "Shorter link length and higher transmission rate",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 18,
+      "type": "mcq",
+      "body": "Let\nA =\n⎡\n⎢\n⎢\n⎣\n1 \t2 \t3 \t4\n4 \t1 \t2 \t3\n3 \t4 \t1 \t2\n2 \t3 \t4 \t1\n⎤\n⎥\n⎥\n⎦\nand\nB =\n⎡\n⎢\n⎢\n⎣\n3 \t4 \t1 \t2\n4 \t1 \t2 \t3\n1 \t2 \t3 \t4\n2 \t3 \t4 \t1\n⎤\n⎥\n⎥\n⎦ .\nLet det",
+      "options": [
+        {
+          "label": "A",
+          "body": "=",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "=",
+          "is_correct": null
+        },
+        {
+          "label": "A",
+          "body": "and det(B) denote the determinants of the matrices A and B,",
+          "is_correct": null
+        },
+        {
+          "label": "A",
+          "body": "det(A) = det(B)",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "det(B) = −det(A)",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "det(A) = 0",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "det(AB) = det(A) + det(B)",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 19,
+      "type": "mcq",
+      "body": "Consider the following definition of a lexical token id for an identifier in a program-\nming language, using extended regular expressions:\nletter \t→ \t[A-Za-z]\ndigit \t→ \t[0-9]\nid \t→ \tletter (letter | digit)∗\nWhich one of the following Non-deterministic Finite-state Automata with \u0002-\ntransitions accepts the set of valid identifiers? \t(A double-circle denotes a final\nstate)",
+      "options": [
+        {
+          "label": "A",
+          "body": "letter \tletter",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "letter",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "letter",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "letter \tletter \tdigit",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 20,
+      "type": "mcq",
+      "body": "An algorithm has to store several keys generated by an adversary in a hash\ntable. The adversary is malicious who tries to maximize the number of collisions.\nLet k be the number of keys, m be the number of slots in the hash table, and k > m.\nWhich one of the following is the best hashing strategy to counteract the adversary?",
+      "options": [
+        {
+          "label": "A",
+          "body": "Division method, i.e., use the hash function h(k) = k \tmod m.",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "Multiplication method, i.e., use the hash function h(k) = \u0005m(kA − \u0005kA\u0006)\u0006, where",
+          "is_correct": null
+        },
+        {
+          "label": "A",
+          "body": "is a carefully chosen constant.",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "Universal hashing method.",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "If k is a prime number, use Division method. Otherwise, use Multiplication method.",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 21,
+      "type": "mcq",
+      "body": "The output of a 2-input multiplexer is connected back to one of its inputs as shown\nin the figure.\n0\n1\nS\nQ\nMultiplexer\nMatch the functional equivalence of this circuit to one of the following options.",
+      "options": [
+        {
+          "label": "A",
+          "body": "D Flip-flop",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "D Latch",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "Half-adder",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "Demultiplexer",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 22,
+      "type": "mcq",
+      "body": "Which one or more of the following need to be saved on a context switch from one\nthread (T1) of a process to another thread (T2) of the same process?",
+      "options": [
+        {
+          "label": "A",
+          "body": "Page table base register",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "Stack pointer",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "Program counter",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "General purpose registers",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 23,
+      "type": "msq",
+      "body": "Which one or more of the following options guarantee that a computer system will\ntransition from user mode to kernel mode?",
+      "options": [
+        {
+          "label": "A",
+          "body": "Function Call",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "malloc Call",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "Page Fault",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "System Call",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 24,
+      "type": "mcq",
+      "body": "Which of the following statements is/are CORRECT?",
+      "options": [
+        {
+          "label": "A",
+          "body": "The intersection of two regular languages is regular.",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "The intersection of two context-free languages is context-free.",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "The intersection of two recursive languages is recursive.",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "The intersection of two recursively enumerable languages is recursively enumerable.",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 25,
+      "type": "mcq",
+      "body": "Which of the following statements is/are INCORRECT about\nthe OSPF (Open Shortest Path First) routing protocol used in the Internet?",
+      "options": [
+        {
+          "label": "A",
+          "body": "OSPF implements Bellman-Ford algorithm to find shortest paths.",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "OSPF uses Dijkstra’s shortest path algorithm to implement least-cost path routing.",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "OSPF is used as an inter-domain routing protocol.",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "OSPF implements hierarchical routing.",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 26,
+      "type": "mcq",
+      "body": "Geetha has a conjecture about integers, which is of the form\n∀x\n(\nP (x) =⇒ ∃yQ(x, y)\n)\n,\nwhere P is a statement about integers, and Q is a statement about pairs of integers.\nWhich of the following (one or more) option(s) would imply Geetha’s conjecture?",
+      "options": [
+        {
+          "label": "A",
+          "body": "∃x",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "∀x∀yQ(x, y)",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "∃y∀x",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "∃x",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 27,
+      "type": "mcq",
+      "body": "Which one or more of the following CPU scheduling algorithms can potentially\ncause starvation?",
+      "options": [
+        {
+          "label": "A",
+          "body": "First-in First-Out",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "Round Robin",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "Priority Scheduling",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "Shortest Job First",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 28,
+      "type": "mcq",
+      "body": "Let\nf (x) = x3 + 15x2 − 33x − 36\nbe a real-valued function.\nWhich of the following statements is/are TRUE?",
+      "options": [
+        {
+          "label": "A",
+          "body": "f (x) does not have a local maximum.",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "f (x) has a local maximum.",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "f (x) does not have a local minimum.",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "f (x) has a local minimum.",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 29,
+      "type": "mcq",
+      "body": "Let f and g be functions of natural numbers given by f (n) = n and g(n) = n2.\nWhich of the following statements is/are TRUE?",
+      "options": [
+        {
+          "label": "A",
+          "body": "f ∈ O(g)",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "f ∈ Ω(g)",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "f ∈ o(g)",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "f ∈ Θ(g)",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 30,
+      "type": "nat",
+      "body": "Let A be the adjacency matrix of the graph with vertices {1, 2, 3, 4, 5}.\n1\t2\n4\n3\n5\nLet λ1, λ2, λ3, λ4, and λ5 be the five eigenvalues of A. Note that these eigenvalues\nneed not be distinct.\nThe value of λ1 + λ2 + λ3 + λ4 + λ5 = \t.",
+      "options": [],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 31,
+      "type": "nat",
+      "body": "The value of the definite integral\n∫ 3\n−3\n∫ 2\n−2\n∫ 1\n−1\n(4x2y − z3) dz dy dx\nis \t. (Rounded off to the nearest integer)",
+      "options": [],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 32,
+      "type": "nat",
+      "body": "A particular number is written as 132 in radix-4 representation. The same number\nin radix-5 representation is \t.",
+      "options": [
+        {
+          "label": "A",
+          "body": "particular number is written as 132 in radix-4 representation. The same number",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 33,
+      "type": "nat",
+      "body": "Consider a 3-stage pipelined processor having a delay of 10 ns (nanoseconds),\n20 ns, and 14 ns, for the first, second, and the third stages, respectively. Assume\nthat there is no other delay and the processor does not suffer from any pipeline\nhazards. Also assume that one instruction is fetched every cycle.\nThe total execution time for executing 100 instructions on this processor is\nns.",
+      "options": [],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 34,
+      "type": "nat",
+      "body": "A keyboard connected to a computer is used at a rate of 1 keystroke per second.\nThe computer system polls the keyboard every 10 ms (milli seconds) to check for\na keystroke and consumes 100 μs (micro seconds) for each poll. If it is determined\nafter polling that a key has been pressed, the system consumes an additional 200\nμs to process the keystroke. Let T1 denote the fraction of a second spent in polling\nand processing a keystroke.\nIn an alternative implementation, the system uses interrupts instead of polling.\nAn interrupt is raised for every keystroke. It takes a total of 1 ms for servicing an\ninterrupt and processing a keystroke. Let T2 denote the fraction of a second spent\nin servicing the interrupt and processing a keystroke.\nThe ratio T1\nT2\nis \t. (Rounded off to one decimal place)",
+      "options": [
+        {
+          "label": "A",
+          "body": "keyboard connected to a computer is used at a rate of 1 keystroke per second.",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 35,
+      "type": "nat",
+      "body": "The integer value printed by the ANSI-C program given below is \t.\n#include<stdio.h>\nint funcp(){\nstatic int x = 1;\nx++;\nreturn x;\n}\nint main(){\nint x,y;\nx = funcp();\ny = funcp()+x;\nprintf(\"%d\\n\", (x+y));\nreturn 0;\n}",
+      "options": [],
+      "answer": null,
+      "marks": 1,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 36,
+      "type": "mcq",
+      "body": "Consider the following program:\nint main()\n{\nf1();\nf2(2);\nf3();\nreturn(0);\n}\nint f1()\n{\nreturn(1);\n}\nint f2(int X)\n{\nf3();\nif (X==1)\nreturn f1();\nelse\nreturn (X*f2(X-1));\n}\nint f3()\n{\nreturn(5);\n}\nWhich one of the following options represents the activation tree corresponding to\nthe main function?",
+      "options": [
+        {
+          "label": "A",
+          "body": "main\nf1 f2 f3\nf3 \tf2\nf3 \tf1",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "main\nf2 f3\nf1\nf1\nf3",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "main\nf2\nf1\nf3 \tf1",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "main\nf1 f2 f3\nf3 \tf2 \tf1",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 37,
+      "type": "mcq",
+      "body": "Consider the control flow graph shown.\nj = n\na = 10\ni = i + 1\nj = j − 1\nB1\nB2\ni = a + 1\na = 20\nB3\nB4\nEXIT\nENTRY\ni = m − 1\nWhich one of the following choices",
+      "options": [
+        {
+          "label": "A",
+          "body": "B1: {}, B2: {a}, B3: {a}, B4: {a}",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "B1: {i, j}, B2: {a}, B3: {a}, B4: {i}",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "B1: {a, i, j}, B2: {a, i, j}, B3: {a, i}, B4: {a}",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "B1: {a, i, j}, B2: {a, j}, B3: {a, j}, B4: {a, i, j}",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 38,
+      "type": "mcq",
+      "body": "Consider the two functions incr and decr shown below.\nincr(){\nwait(s);\nX = X+1;\nsignal(s);\n}\ndecr(){\nwait(s);\nX = X-1;\nsignal(s);\n}\nThere are 5 threads each invoking incr once, and 3 threads each invoking decr\nonce, on the same shared variable X. The initial value of X is 10.\nSuppose there are two implementations of the semaphore s, as follows:\nI-1: s is a binary semaphore initialized to 1.\nI-2: s is a counting semaphore initialized to 2.\nLet V1, V2 be the values of X at the end of execution of all the threads with\nimplementations I-1, I-2, respectively.\nWhich one of the following choices corresponds to the minimum possible values of\nV1, V2, respectively?",
+      "options": [
+        {
+          "label": "A",
+          "body": "15, 7",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "7, 7",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "12, 7",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "12, 8",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 39,
+      "type": "mcq",
+      "body": "Consider the context-free grammar G below\nS \t→ \taSb | X\nX \t→ \taX | Xb | a | b ,\nwhere S and X are non-terminals, and a and b are terminal symbols. The starting\nnon-terminal is S.\nWhich one of the following statements is",
+      "options": [
+        {
+          "label": "A",
+          "body": "The language generated by G is (a + b)∗",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "The language generated by G is a∗(a + b)b∗",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "The language generated by G is a∗b∗(a + b)",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "The language generated by G is not a regular language",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 40,
+      "type": "mcq",
+      "body": "Consider the pushdown automaton (PDA) P below, which runs on the input alpha-\nbet {a, b}, has stack alphabet {⊥, A}, and has three states {s, p, q}, with s being\nthe start state. \tA transition from state u to state v, labelled c/X/γ, where c is\nan input symbol or \u0002, X is a stack symbol, and γ is a string of stack symbols,\nrepresents the fact that in state u, the PDA can read c from the input, with X on\nthe top of its stack, pop X from the stack, push in the string γ on the stack, and\ngo to state v. In the initial configuration, the stack has only the symbol ⊥ in it.\nThe PDA accepts by empty stack.\ns\na/⊥/A⊥\na/A/AA\np\nb/A/\u0002\nb/A/\u0002\nq\n\u0002/A/\u0002\n\u0002/⊥/\u0002\n\u0002/A/\u0002 \t\u0002/A/\u0002\nWhich one of the following options",
+      "options": [
+        {
+          "label": "A",
+          "body": "{ambn | 1 ≤ m and n < m}",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "{ambn | 0 ≤ n ≤ m}",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "{ambn | 0 ≤ m and \t0 ≤ n}",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "{am | 0 ≤ m} ∪ {bn | 0 ≤ n}",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 41,
+      "type": "mcq",
+      "body": "Consider the given C-code and its corresponding assembly code, \twith a few\noperands U1–U4 being unknown. Some useful information as well as the semantics\nof each unique assembly instruction is annotated as inline comments in the code.\nThe memory is byte-addressable.\n//C-code\nint a[10], b[10], i;\n// int is 32-bit\nfor (i=0; i<10;i++)\na[i] = b[i] * 8;\n;assembly-code (; indicates comments)\n;r1-r5 are 32-bit integer registers\n;initialize r1=0, r2=10\n;initialize r3, r4 with base address of a, b\nL01: jeq r1, r2, end \t;if(r1==r2) goto end\nL02: lw \tr5, 0(r4) \t;r5 <- Memory[r4+0]\nL03: shl r5, r5, U1 \t;r5 <- r5 << U1\nL04: sw \tr5, 0(r3) \t;Memory[r3+0] <- r5\nL05: add r3, r3, U2 \t;r3 <- r3+U2\nL06: add r4, r4, U3\nL07: add r1, r1, 1\nL08: jmp U4 \t;goto U4\nL09: end\nWhich one of the following options is a",
+      "options": [
+        {
+          "label": "A",
+          "body": "(8, 4, 1, L02)",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "(3, 4, 4, L01)",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "(8, 1, 1, L02)",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "(3, 1, 1, L01)",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 42,
+      "type": "mcq",
+      "body": "A 4 kilobyte (KB) byte-addressable memory is realized using four 1 KB memory\nblocks. \tTwo input address lines (IA4 and IA3) are connected to the chip select\n(CS) port of these memory blocks through a decoder as shown in the figure. The\nremaining ten input address lines from IA11–IA0 are connected to the address\nport of these blocks. The chip select (CS) is active high.\nX1 \tX2 \tX3 \tX4\tDecoder\n1KB memory \t1KB memory \t1KB memory \t1KB memory\nQ0\nQ1\nQ2\nQ3\nA1\nA0\nCS \tCS \tCS \tCS\nIA11\nIA10\nIA9\nIA8\nIA7\nIA6\nIA5\nIA2\nIA1\nIA0\nIA4\nIA3\nAddr \tAddr \tAddr \tAddr\n10-bit\nMSB\nLSB\nThe input memory addresses (IA11–IA0), in decimal, for the starting locations\n(Addr=0) of each block (indicated as X1, X2, X3, X4 in the figure) are among the\noptions given below. Which one of the following options is",
+      "options": [
+        {
+          "label": "A",
+          "body": "4 kilobyte (KB) byte-addressable memory is realized using four 1 KB memory",
+          "is_correct": null
+        },
+        {
+          "label": "A",
+          "body": "(0, 1, 2, 3)",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "(0, 1024, 2048, 3072)",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "(0, 8, 16, 24)",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "(0, 0, 0, 0)",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 43,
+      "type": "mcq",
+      "body": "Consider a sequential digital circuit consisting of T flip-flops and D flip-flops as\nshown in the figure. \tCLKIN is the clock input to the circuit. \tAt the beginning,\nQ1, Q2 and Q3 have values 0, 1 and 1, respectively.\nT\nQ\nCLK\nD\nQ\nCLK\nT\nQ\nCLK\nCLKIN Q1 \tQ2 \tQ3\nWhich one of the given values of (Q1, Q2, Q3) can NEVER be obtained with this\ndigital circuit?",
+      "options": [
+        {
+          "label": "A",
+          "body": "(0, 0, 1)",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "(1, 0, 0)",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "(1, 0, 1)",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "(1, 1, 1)",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 44,
+      "type": "mcq",
+      "body": "A Boolean digital circuit is composed using two 4-input multiplexers (M1 and M2)\nand one 2-input multiplexer (M3) as shown in the figure. X0–X7 are the inputs of\nthe multiplexers M1 and M2 and could be connected to either 0 or 1. The select\nlines of the multiplexers are connected to Boolean variables A, B and C as shown.\nX0\nX1\nX2\nX3\nA\nC\nX4\nX5\nX6\nX7\nA\nC\nB\n0\n1\n2\n3\n0\n1\n2\n3\nS1 S0\nS1 S0\nS\n0\n1\nMultiplexer\nMultiplexer\nMultiplexer\nQ\nQ\nQ\nM1\nM2\nM3\nWhich one of the following set of values of (X0, X1, X2, X3, X4, X5, X6, X7) will\nrealise the Boolean function A + A.C + A.B.C?",
+      "options": [
+        {
+          "label": "A",
+          "body": "Boolean digital circuit is composed using two 4-input multiplexers (M1 and M2)",
+          "is_correct": null
+        },
+        {
+          "label": "A",
+          "body": "(1, 1, 0, 0, 1, 1, 1, 0)",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "(1, 1, 0, 0, 1, 1, 0, 1)",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "(1, 1, 0, 1, 1, 1, 0, 0)",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "(0, 0, 1, 1, 0, 1, 1, 1)",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 45,
+      "type": "mcq",
+      "body": "Consider the IEEE-754 single precision floating point numbers\nP=0xC1800000 and Q=0x3F5C2EF4.\nWhich one of the following corresponds to the product of these numbers\n(i.e., P × Q), represented in the IEEE-754 single precision format?",
+      "options": [
+        {
+          "label": "A",
+          "body": "0x404C2EF4",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "0x405C2EF4",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "0xC15C2EF4",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "0xC14C2EF4",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 46,
+      "type": "mcq",
+      "body": "Let A be a priority queue for maintaining a set of elements. \tSuppose A is\nimplemented using a max-heap data structure. The operation Extract-Max",
+      "options": [
+        {
+          "label": "A",
+          "body": "Both Extract-Max(A) and Insert(A,key) run in O(1).",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "Both Extract-Max(A) and Insert(A,key) run in O(log(n)).",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "Extract-Max(A) runs in O(1) whereas Insert(A,key) runs in O(n).",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "Extract-Max(A) runs in O(1) whereas Insert(A,key) runs in O(log(n)).",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 47,
+      "type": "mcq",
+      "body": "Consider the C function foo and the binary tree shown.\ntypedef struct node {\nint val;\nstruct node *left, *right;\n} node;\nint foo(node *p) {\nint retval;\nif (p == NULL)\nreturn 0;\nelse {\nretval = p->val + foo(p->left) + foo(p->right);\nprintf(\"%d \", retval);\nreturn retval;\n}\n}\n10\n5\n3 \t8\n11\n13\nWhen foo is called with a pointer to the root node of the given binary tree, what\nwill it print?",
+      "options": [
+        {
+          "label": "A",
+          "body": "3 8 5 13 11 10",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "3 5 8 10 11 13",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "3 8 16 13 24 50",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "3 16 8 50 24 13",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 48,
+      "type": "mcq",
+      "body": "Let U = {1, 2, . . . , n}, where n is a large positive integer greater than 1000. Let\nk be a positive integer less than n. Let A, B be subsets of U with |A| = |B| = k\nand A ∩ B = ∅. We say that a permutation of U separates A from B if one of the\nfollowing is true.\n- All members of A appear in the permutation before any of the members of B.\n- All members of B appear in the permutation before any of the members of A.\nHow many permutations of U separate A from B?",
+      "options": [
+        {
+          "label": "A",
+          "body": "n!",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "2",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 49,
+      "type": "mcq",
+      "body": "Let f : A → B be an onto (or surjective) function, where A and B are nonempty\nsets. Define an equivalence relation ∼ on the set A as\na1 ∼ a2 if f (a1) = f (a2) ,\nwhere a1, a2 ∈ A. Let E = {[x] : x ∈ A} be the set of all the equivalence classes\nunder ∼. Define a new mapping F : E → B as\nF ([x]) = f (x), \tfor all the equivalence classes [x] in E.\nWhich of the following statements is/are TRUE?",
+      "options": [
+        {
+          "label": "A",
+          "body": "F is NOT well-defined.",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "F is an onto (or surjective) function.",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "F is a one-to-one (or injective) function.",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "F is a bijective function.",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 50,
+      "type": "mcq",
+      "body": "Suppose you are asked to design a new reliable byte-stream transport protocol\nlike TCP. This protocol, named myTCP, runs over a 100 Mbps network with Round\nTrip Time of 150 milliseconds and the maximum segment lifetime of 2 minutes.\nWhich of the following is/are valid lengths of the Sequence Number field in the\nmyTCP header?",
+      "options": [
+        {
+          "label": "A",
+          "body": "30 bits",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "32 bits",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "34 bits",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "36 bits",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 51,
+      "type": "mcq",
+      "body": "Let X be a set and 2X denote the powerset of X.\nDefine a binary operation Δ on 2X as follows:\nAΔB = (A − B) ∪ (B − A) .\nLet H = (2X , Δ). Which of the following statements about H is/are",
+      "options": [
+        {
+          "label": "A",
+          "body": "H is a group.",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "Every element in H has an inverse, but H is NOT a group.",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "For every A ∈ 2X , the inverse of A is the complement of A.",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "For every A ∈ 2X , the inverse of A is A.",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 52,
+      "type": "mcq",
+      "body": "Suppose in a web browser, you click on the www.gate-2023.in URL. The browser\ncache is empty. The IP address for this URL is not cached in your local host, so\na DNS lookup is triggered (by the local DNS server deployed on your local host)\nover the 3-tier DNS hierarchy in an iterative mode. No resource records are cached\nanywhere across all DNS servers.\nLet RTT denote the round trip time between your local host and DNS servers\nin the DNS hierarchy. \tThe round trip time between the local host and the web\nserver hosting www.gate-2023.in is also equal to RTT. The HTML file associated\nwith the URL is small enough to have negligible transmission time and negligible\nrendering time by your web browser, which references 10 equally small objects on\nthe same web server.\nWhich of the following statements is/are",
+      "options": [
+        {
+          "label": "A",
+          "body": "7 RTTs, in case of non-persistent HTTP with 5 parallel TCP connections.",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "5 RTTs, in case of persistent HTTP with pipelining.",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "9 RTTs, in case of non-persistent HTTP with 5 parallel TCP connections.",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "6 RTTs, in case of persistent HTTP with pipelining.",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 53,
+      "type": "mcq",
+      "body": "Consider a random experiment where two fair coins are tossed. Let A be the event\nthat denotes HEAD on both the throws, B be the event that denotes HEAD on\nthe first throw, and C be the event that denotes HEAD on the second throw.\nWhich of the following statements is/are TRUE?",
+      "options": [
+        {
+          "label": "A",
+          "body": "A and B are independent.",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "A and C are independent.",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "B and C are independent.",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "Prob(B|C) = Prob(B)",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 54,
+      "type": "mcq",
+      "body": "Consider functions Function 1 and Function 2 expressed in pseudocode as\nfollows:\nFunction 1\nwhile n > 1 do\nfor i = 1 to n do\nx = x + 1;\nend for\nn = \u0005n/2\u0006;\nend while\nFunction 2\nfor i = 1 to 100 ∗ n do\nx = x + 1;\nend for\nLet f1(n) and f2(n) denote the number of times the statement “x = x + 1” is\nexecuted in Function 1 and Function 2, respectively.\nWhich of the following statements is/are TRUE?",
+      "options": [
+        {
+          "label": "A",
+          "body": "f1(n) ∈ Θ(f2(n))",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "f1(n) ∈ o(f2(n))",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "f1(n) ∈ ω(f2(n))",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "f1(n) ∈ O(n)",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 55,
+      "type": "mcq",
+      "body": "Let G be a simple, finite, undirected graph with vertex set {v1, . . . , vn}. Let Δ(G)\ndenote the maximum degree of G and let N = {1, 2, . . .} denote the set of all possible\ncolors. Color the vertices of G using the following greedy strategy:\nfor i = 1, . . . , n\ncolor(vi) ← min{j ∈ N : \tno neighbour of vi is colored j}\nWhich of the following statements is/are TRUE?",
+      "options": [
+        {
+          "label": "A",
+          "body": "This procedure results in a proper vertex coloring of G.",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "The number of colors used is at most Δ(G) + 1.",
+          "is_correct": null
+        },
+        {
+          "label": "C",
+          "body": "The number of colors used is at most Δ(G).",
+          "is_correct": null
+        },
+        {
+          "label": "D",
+          "body": "The number of colors used is equal to the chromatic number of G.",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 56,
+      "type": "nat",
+      "body": "Let U = {1, 2, 3}. Let 2U denote the powerset of U . Consider an undirected graph\nG whose vertex set is 2U . For any A, B ∈ 2U , (A, B) is an edge in G if and only\nif (i) A \u0014 = B, and (ii) either A \u0002 B or B \u0002 A. For any vertex A in G, the set of\nall possible orderings in which the vertices of G can be visited in a Breadth First\nSearch (BFS) starting from A is denoted by B",
+      "options": [
+        {
+          "label": "A",
+          "body": ".",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "is an edge in G if and only",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 57,
+      "type": "nat",
+      "body": "Consider the following two-dimensional array D in the C programming language,\nwhich is stored in row-major order:\nint D[128][128];\nDemand paging is used for allocating memory and each physical page frame holds\n512 elements of the array D. The Least Recently Used (LRU) page-replacement\npolicy is used by the operating system. \tA total of 30 physical page frames are\nallocated to a process which executes the following code snippet:\nfor (int i = 0; i < 128; i++)\nfor (int j = 0; j < 128; j++)\nD[j][i] *= 10;\nThe number of page faults generated during the execution of this code snippet is\n.",
+      "options": [],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 58,
+      "type": "nat",
+      "body": "Consider a computer system with 57-bit virtual addressing using multi-level\ntree-structured page tables with L levels for virtual to physical address translation.\nThe page size is 4 KB (1 KB = 1024 B) and a page table entry at any of the levels\noccupies 8 bytes.\nThe value of L is \t.",
+      "options": [
+        {
+          "label": "B",
+          "body": "and a page table entry at any of the levels",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 59,
+      "type": "nat",
+      "body": "Consider a sequence a of elements a0 = 1, a1 = 5, a2 = 7, a3 = 8, a4 = 9, and\na5 = 2. The following operations are performed on a stack S and a queue Q, both\nof which are initially empty.\nI: push the elements of a from a0 to a5 in that order into S.\nII: enqueue the elements of a from a0 to a5 in that order into Q.\nIII: pop an element from S.\nIV: dequeue an element from Q.\nV: pop an element from S.\nVI: dequeue an element from Q.\nVII: dequeue an element from Q and push the same element into S.\nVIII: Repeat operation VII three times.\nIX: pop an element from S.\nX: pop an element from S.\nThe top element of S after executing the above operations is \t.",
+      "options": [],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 60,
+      "type": "nat",
+      "body": "Consider the syntax directed translation given by the following grammar and se-\nmantic rules. Here N , I, F and B are non-terminals. N is the starting non-terminal,\nand #, 0 and 1 are lexical tokens corresponding to input letters “#”, “0” and “1”,\nrespectively. X.val denotes the synthesized attribute (a numeric value) associated\nwith a non-terminal X. I1 and F1 denote occurrences of I and F on the right hand\nside of a production, respectively. For the tokens 0 and 1, 0.val = 0 and 1.val = 1.\nN \t→ \tI # F \tN.val = I.val + F.val\nI \t→ \tI1 B \tI.val = (2 I1.val ) + B.val\nI \t→ \tB \tI.val = B.val\nF \t→ \tB F1 \tF.val = 1\n2 (B.val + F1.val )\nF \t→ \tB \tF.val = 1\n2 B.val\nB \t→ \t0 \tB.val = 0.val\nB \t→ \t1 \tB.val = 1.val\nThe value computed by the translation scheme for the input string\n10#011\nis \t. (Rounded off to three decimal places)",
+      "options": [
+        {
+          "label": "B",
+          "body": "→ \t0 \tB.val = 0.val",
+          "is_correct": null
+        },
+        {
+          "label": "B",
+          "body": "→ \t1 \tB.val = 1.val",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 61,
+      "type": "nat",
+      "body": "Consider the following table named Student in a relational database. The primary",
+      "options": [],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 62,
+      "type": "nat",
+      "body": "Consider a database of fixed-length records, stored as an ordered file. The database\nhas 25,000 records, with each record being 100 bytes, of which the primary",
+      "options": [],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 63,
+      "type": "nat",
+      "body": "Consider the language L over the alphabet {0, 1}, given below:\nL = {w ∈ {0, 1}∗ | w does not contain three or more consecutive 1’s}.\nThe minimum number of states in a Deterministic Finite-State Automaton (DFA)\nfor L is \t.",
+      "options": [
+        {
+          "label": "A",
+          "body": "for L is \t.",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 64,
+      "type": "nat",
+      "body": "An 8-way set associative cache of size 64 KB (1 KB = 1024 bytes) is used in a\nsystem with 32-bit address. \tThe address is sub-divided into TAG, INDEX, and\nBLOCK OFFSET.\nThe number of bits in the TAG is \t.",
+      "options": [],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    },
+    {
+      "question_number": 65,
+      "type": "nat",
+      "body": "The forwarding table of a router is shown below.\nSubnet Number \tSubnet Mask \tInterface ID\n200.150.0.0 \t255.255.0.0 \t1\n200.150.64.0 \t255.255.224.0 \t2\n200.150.68.0 \t255.255.255.0 \t3\n200.150.68.64 \t255.255.255.224 \t4\nDefault \t0\nA packet addressed to a destination address 200.150.68.118 arrives at the router.\nIt will be forwarded to the interface with ID \t.",
+      "options": [
+        {
+          "label": "A",
+          "body": "packet addressed to a destination address 200.150.68.118 arrives at the router.",
+          "is_correct": null
+        }
+      ],
+      "answer": null,
+      "marks": 2,
+      "negative_marks": null,
+      "warnings": [
+        "No answer found in extracted text"
+      ]
+    }
+  ],
+  "generated_at": "2026-09-14T05:17:08.339Z",
+  "parser_version": "1.0.0"
+}
