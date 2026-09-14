@@ -40,12 +40,10 @@ export interface QuestionBoundary {
   rawText: string;
 }
 
-const QUESTION_PATTERNS = [
-  /^Q\s*\.\s*(\d{1,2})\s*(?:–|:|\s)/m,
-  /^Q\s*(\d{1,2})\s*(?:–|:|\s)/m,
-  /^Q\s*\.\s*(\d{1,2})$/m,
-  /^Q\s*(\d{1,2})$/m,
-];
+const PAGE_SEPARATOR_PATTERN = /^--\s*\d+\s+of\s+\d+\s*--$/;
+const QUESTION_INLINE_PATTERN = /^\s*Q\.\s*(\d{1,2})\s+\S/i;
+const QUESTION_FOOTER_PATTERN = /^\s*Q\.\s*(\d{1,2})\s*$/i;
+const QUESTION_RANGE_PATTERN = /^\s*Q\.\s*\d{1,2}\s*[–-]\s*Q\.\s*\d{1,2}\s+Carry\b/i;
 
 const HEADER_PATTERNS = [
   /^Computer Science/i,
@@ -281,57 +279,114 @@ function isHeaderLine(line: string): boolean {
 }
 
 export function detectQuestionBoundaries(text: string): QuestionBoundary[] {
-  const boundaries: QuestionBoundary[] = [];
   const lines = text.split('\n');
-  let currentStart = -1;
-  let currentNumber = -1;
-  let currentText = '';
+  if (lines.length === 0) return [];
 
+  // 1) Group lines into page segments using the trailing "— N of M —" separators.
+  //    GATE question bodies begin at the top of the PDF page they are printed on, so
+  //    anchoring boundaries to page structure keeps option/diagram/explanation text
+  //    inside the question it belongs to.
+  const pageSegments: Array<{ startLine: number; endLine: number }> = [];
+  let segmentStart = 0;
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (isHeaderLine(line)) {
-      continue;
+    if (PAGE_SEPARATOR_PATTERN.test(lines[i].trim())) {
+      pageSegments.push({ startLine: segmentStart, endLine: i });
+      segmentStart = i + 1;
     }
+  }
+  pageSegments.push({ startLine: segmentStart, endLine: lines.length });
 
-    let matched = false;
-    let qNum = -1;
+  // 2) Collect a question-start candidate for every page that can be labelled.
+  //    - Inline marker "Q.N <content>" (used by the GA section) anchors directly.
+  //    - A standalone footer "Q.N" that is the LAST meaningful line of a page labels
+  //      the question whose body starts at that page's first content line (used by the
+  //      main CS section). Range directives like "Q.6 – Q.10 Carry TWO marks Each" are
+  //      page headers and never treated as questions.
+  const starts: Array<{ questionNumber: number; startIndex: number }> = [];
 
-    for (const pattern of QUESTION_PATTERNS) {
-      const match = line.match(pattern);
-      if (match) {
-        qNum = parseInt(match[1], 10);
-        if (!isNaN(qNum) && qNum > 0 && qNum <= 65) {
-          matched = true;
-          break;
+  for (const segment of pageSegments) {
+    const inlineMarkers: Array<{ questionNumber: number; lineIndex: number }> = [];
+    let footerCandidate: { questionNumber: number; lineIndex: number } | null = null;
+    let firstContentIndex: number | null = null;
+    let lastMeaningfulIndex = -1;
+
+    for (let i = segment.startLine; i < segment.endLine; i++) {
+      const trimmed = lines[i].trim();
+      if (trimmed.length === 0) continue;
+      if (isHeaderLine(trimmed)) continue;
+      if (QUESTION_RANGE_PATTERN.test(trimmed)) continue;
+
+      lastMeaningfulIndex = i;
+
+      const inlineMatch = trimmed.match(QUESTION_INLINE_PATTERN);
+      if (inlineMatch) {
+        const qNum = parseInt(inlineMatch[1], 10);
+        if (qNum > 0) {
+          inlineMarkers.push({ questionNumber: qNum, lineIndex: i });
         }
+        if (firstContentIndex === null) firstContentIndex = i;
+        continue;
       }
+
+      const footerMatch = trimmed.match(QUESTION_FOOTER_PATTERN);
+      if (footerMatch) {
+        const qNum = parseInt(footerMatch[1], 10);
+        if (qNum > 0) {
+          footerCandidate = { questionNumber: qNum, lineIndex: i };
+        }
+        continue;
+      }
+
+      if (firstContentIndex === null) firstContentIndex = i;
     }
 
-    if (matched) {
-      if (currentStart !== -1 && currentText.trim().length > 20) {
-        boundaries.push({
-          startIndex: currentStart,
-          endIndex: i - 1,
-          questionNumber: currentNumber,
-          rawText: currentText.trim(),
-        });
+    if (inlineMarkers.length > 0) {
+      for (const marker of inlineMarkers) {
+        starts.push({ questionNumber: marker.questionNumber, startIndex: marker.lineIndex });
       }
-      currentStart = i;
-      currentNumber = qNum;
-      currentText = line + '\n';
-    } else {
-      if (currentStart !== -1) {
-        currentText += line + '\n';
-      }
+    } else if (
+      footerCandidate !== null &&
+      footerCandidate.lineIndex === lastMeaningfulIndex &&
+      firstContentIndex !== null
+    ) {
+      starts.push({ questionNumber: footerCandidate.questionNumber, startIndex: firstContentIndex });
     }
   }
 
-  if (currentStart !== -1 && currentText.trim().length > 20) {
+  // 3) Collapse consecutive duplicate numbers. A question spanning several pages is
+  //    labelled once per page; keeping only the first label lets the earlier boundary
+  //    extend across the whole question.
+  const dedupedStarts: Array<{ questionNumber: number; startIndex: number }> = [];
+  for (const candidate of starts) {
+    const previous = dedupedStarts[dedupedStarts.length - 1];
+    if (previous && previous.questionNumber === candidate.questionNumber) continue;
+    dedupedStarts.push(candidate);
+  }
+
+  // 4) Build boundaries [startIndex, nextStart) and strip structural noise (page
+  //    headers/separators, redundant footer labels, blank lines) from rawText.
+  const boundaries: QuestionBoundary[] = [];
+  for (let i = 0; i < dedupedStarts.length; i++) {
+    const startIndex = dedupedStarts[i].startIndex;
+    const endIndex = i < dedupedStarts.length - 1 ? dedupedStarts[i + 1].startIndex : lines.length;
+
+    const contentLines: string[] = [];
+    for (let j = startIndex; j < endIndex; j++) {
+      const trimmed = lines[j].trim();
+      if (trimmed.length === 0) continue;
+      if (isHeaderLine(lines[j])) continue;
+      if (QUESTION_FOOTER_PATTERN.test(trimmed)) continue;
+      contentLines.push(lines[j]);
+    }
+
+    const rawText = contentLines.join('\n').trim();
+    if (rawText.length <= 20) continue;
+
     boundaries.push({
-      startIndex: currentStart,
-      endIndex: lines.length - 1,
-      questionNumber: currentNumber,
-      rawText: currentText.trim(),
+      startIndex,
+      endIndex: endIndex - 1,
+      questionNumber: dedupedStarts[i].questionNumber,
+      rawText,
     });
   }
 
