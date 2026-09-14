@@ -36,13 +36,19 @@ function extractMarksRangesFromText(text: string): MarksRange[] {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     // Normalize all common dash variants in range directives before matching,
-  // so en dash (–), em dash (—) and minus sign (−) all behave like an ASCII
-  // hyphen and do not break / carry pattern matching.
-  const dashNormalized = line.replace(/[\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2212\\uFF0D]/g, '-');
-  const trimmed = dashNormalized.trim();
+    // so en dash (–), em dash (—) and minus sign (−) all behave like an ASCII
+    // hyphen and do not break / carry pattern matching.
+    const dashNormalized = line.replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFF0D]/g, '-');
+    const trimmed = dashNormalized.trim();
     if (!trimmed.toLowerCase().includes('carry')) continue;
 
-    let match = trimmed.match(/Q\.\s*(\d+)\s*[–-]\s*Q\.\s*(\d+)\s+Carry\s+(one|two)\s+marks?(?:\s+[Ee]ach)?/i);
+    // Full range directive. Two real-world shapes must both match:
+    //   "Q.1 – Q.5 Carry ONE mark each."                      (GA section)
+    //   "Q.11 – Q.22 Multiple Choice Questions (MCQ), carry ONE mark each."
+    // The lazy .*? bridges any section-type text between the range and "carry".
+    // Digits are capped at 2 because PDF extraction can smear the range end
+    // (e.g. "Q.46 – Q.555" for "Q.46 – Q.55" in the 2022 paper).
+    let match = trimmed.match(/Q\.\s*(\d{1,2})\s*[–-]\s*Q\.\s*(\d{1,2}).*?carry\s+(one|two)\s+marks?(?:\s+each)?/i);
     if (match) {
       ranges.push({
         start: parseInt(match[1], 10),

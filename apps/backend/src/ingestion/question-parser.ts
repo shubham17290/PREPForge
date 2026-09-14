@@ -367,10 +367,11 @@ export function detectQuestionBoundaries(text: string): QuestionBoundary[] {
 
   // 2) Collect a question-start candidate for every page that can be labelled.
   //    - Inline marker "Q.N <content>" (used by the GA section) anchors directly.
-  //    - A standalone footer "Q.N" that is the LAST meaningful line of a page labels
-  //      the question whose body starts at that page's first content line (used by the
-  //      main CS section). Range directives like "Q.6 – Q.10 Carry TWO marks Each" are
-  //      page headers and never treated as questions.
+  //    - A standalone bare "Q.N" line labels the page's first content line, whether
+  //      it is printed at the top of the page with the body below it (e.g. GATE 2022
+  //      Q.8) or as the LAST meaningful line of a page. Range directives like
+  //      "Q.6 – Q.10 Carry TWO marks Each" are page headers and never treated as
+  //      questions.
   const starts: Array<{ questionNumber: number; startIndex: number }> = [];
 
   for (const segment of pageSegments) {
@@ -416,9 +417,13 @@ export function detectQuestionBoundaries(text: string): QuestionBoundary[] {
       }
     } else if (
       footerCandidate !== null &&
-      footerCandidate.lineIndex === lastMeaningfulIndex &&
-      firstContentIndex !== null
+      firstContentIndex !== null &&
+      (footerCandidate.lineIndex === lastMeaningfulIndex ||
+        footerCandidate.lineIndex < firstContentIndex)
     ) {
+      // A bare "Q.N" line labels the page's first content line whether it sits at
+      // the top of the page with the body printed below it (e.g. GATE 2022 Q.8) or
+      // as a trailing footer on the previous page.
       starts.push({ questionNumber: footerCandidate.questionNumber, startIndex: firstContentIndex });
     }
   }
@@ -429,24 +434,6 @@ export function detectQuestionBoundaries(text: string): QuestionBoundary[] {
   const dedupedStarts: Array<{ questionNumber: number; startIndex: number }> = [];
   for (const candidate of starts) {
     const previous = dedupedStarts[dedupedStarts.length - 1];
-      if (inlineMarkers.length > 0) {
-        for (const marker of inlineMarkers) {
-          starts.push({ questionNumber: marker.questionNumber, startIndex: marker.lineIndex });
-        }
-        if (
-          footerCandidate !== null &&
-          firstContentIndex !== null &&
-          footerCandidate.lineIndex < firstContentIndex
-        ) {
-          starts.push({ questionNumber: footerCandidate.questionNumber, startIndex: firstContentIndex });
-        }
-      } else if (
-        footerCandidate !== null &&
-        footerCandidate.lineIndex === lastMeaningfulIndex &&
-        firstContentIndex !== null
-      ) {
-        starts.push({ questionNumber: footerCandidate.questionNumber, startIndex: firstContentIndex });
-      }
     if (previous && previous.questionNumber === candidate.questionNumber) continue;
     dedupedStarts.push(candidate);
   }
@@ -457,7 +444,7 @@ export function detectQuestionBoundaries(text: string): QuestionBoundary[] {
   for (let i = 0; i < dedupedStarts.length; i++) {
     const startIndex = dedupedStarts[i].startIndex;
     const endIndex = i < dedupedStarts.length - 1 ? dedupedStarts[i + 1].startIndex : lines.length;
-BLANKREPLACED2
+
 
     const contentLines: string[] = [];
     for (let j = startIndex; j < endIndex; j++) {
