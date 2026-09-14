@@ -95,6 +95,17 @@ const NAT_INDICATORS = [
   /the value of .* is\s*\./i,
   /^is\s+\.$/i,
   /the number of .* is\s*\./i,
+  // NAT answer blanks in the extracted PDF text. GATE NAT questions print an empty
+  // answer box where the numeric answer goes; the extractor renders that box as a tab
+  // followed by a period ("\t.") at the end of the question statement.
+  /\t\s*\./i,
+  // When the answer box is followed by a unit (e.g. "is ___ ns."), the extractor can
+  // render the box as a line break: "is\nns.". This only fires for a line ending in
+  // the standalone word "is" whose next line is a short unit fragment ending in ".".
+  /\bis\s*\n\s*[A-Za-z]{1,8}\s*\./i,
+  // "Rounded off to <precision>" is NAT-only phrasing (MCQ/MSQ answers are fixed
+  // options and are never rounded to a decimal place).
+  /rounded\s+off\s+to\b/i,
 ];
 
 function detectQuestionType(text: string): 'mcq' | 'msq' | 'nat' | 'unknown' {
