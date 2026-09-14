@@ -1,5 +1,8 @@
 import { extractPDFText, parseGATEFileName, resolveRawPDFPath, listRawPDFFiles } from './pdf-extractor.js';
-import { detectQuestionBoundaries, parseQuestion } from './question-parser.js';
+import {
+  detectQuestionBoundaries,
+  parseQuestion,
+} from './question-parser.js';
 import { validateQuestions, getValidationSummary } from './validator.js';
 import { checkAllDuplicates } from './duplicate-detector.js';
 import { createStagingOutput, writeStagingFile, writeHumanReport, generateHumanReport } from './staging.js';
@@ -32,7 +35,11 @@ function extractMarksRangesFromText(text: string): MarksRange[] {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const trimmed = normalizePipelineDashes(line).trim();
+    // Normalize all common dash variants in range directives before matching,
+  // so en dash (–), em dash (—) and minus sign (−) all behave like an ASCII
+  // hyphen and do not break / carry pattern matching.
+  const dashNormalized = line.replace(/[\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2212\\uFF0D]/g, '-');
+  const trimmed = dashNormalized.trim();
     if (!trimmed.toLowerCase().includes('carry')) continue;
 
     let match = trimmed.match(/Q\.\s*(\d+)\s*[–-]\s*Q\.\s*(\d+)\s+Carry\s+(one|two)\s+marks?(?:\s+[Ee]ach)?/i);
