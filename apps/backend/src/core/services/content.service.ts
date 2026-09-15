@@ -151,9 +151,20 @@ export async function deactivateTopicValidated(actorId: string, id: string): Pro
 
 // ─── Questions (mod/admin): create / edit / publish / reject / import ────────
 
+export interface ValidationPolicy {
+  /**
+   * Internal-only (Phase 12F.2-S): PYQ keyless-draft import path.
+   * Relaxes ONLY the answer-key shape rules (MCQ/MSQ correct count, NAT keys);
+   * every other validation rule — including >=2 options with non-empty bodies —
+   * is unchanged. Normal create/update paths keep the default (key required).
+   */
+  allowKeylessDraft?: boolean;
+}
+
 export async function validateQuestionInput(
   raw: Record<string, unknown>,
   mode: "create" | "edit",
+  policy: ValidationPolicy = {},
 ): Promise<QuestionWriteInput> {
   const details: Array<{ field: string; code: string; message: string }> = [];
 
@@ -240,17 +251,17 @@ export async function validateQuestionInput(
       ]);
     }
     const correctCount = options.filter((option) => option.isCorrect === true).length;
-    if (effectiveType === "mcq" && correctCount !== 1) {
+    if (effectiveType === "mcq" && correctCount !== 1 && !policy.allowKeylessDraft) {
       throw errors.validation([
         { field: "options", code: "VALIDATION_MCQ_ONE_CORRECT", message: "MCQ requires exactly one correct option." },
       ]);
     }
-    if (effectiveType === "msq" && correctCount < 1) {
+    if (effectiveType === "msq" && correctCount < 1 && !policy.allowKeylessDraft) {
       throw errors.validation([
         { field: "options", code: "VALIDATION_MSQ_ONE_CORRECT", message: "MSQ requires at least one correct option." },
       ]);
     }
-  } else if (effectiveType === "nat") {
+  } else if (effectiveType === "nat" && !policy.allowKeylessDraft) {
     const keys = parsedNumericAnswers;
     if (!Array.isArray(keys) || keys.length < 1) {
       throw errors.validation([
@@ -349,6 +360,29 @@ export async function publishQuestionValidated(actorId: string, id: string) {
   if (question.status !== "in_review" && question.status !== "draft") {
     throw errors.conflict("CONFLICT_STATE_INVALID", `Cannot publish from status "${question.status}".`);
   }
+
+  // PHASE 12F.2-S — publish-time answer-key guard (Phase 12F.2-R §4.2). Keyless
+  // PYQ drafts are now importable, but they must never reach students: practice
+  // pools select only `published` questions, so unkeyed release is blocked here.
+  // `findQuestionById` above already includes type code, option flags and keys.
+  const typeCode = question.questionType.code;
+  const correctCount = question.options.filter((option) => option.isCorrect).length;
+  const finiteKeys = question.numericAnswers.filter((key) => Number.isFinite(Number(key.numericValue))).length;
+  const unkeyed =
+    (typeCode === "mcq" && correctCount !== 1) ||
+    (typeCode === "msq" && correctCount < 1) ||
+    (typeCode === "nat" && finiteKeys < 1);
+  if (unkeyed) {
+    throw errors.validation([
+      {
+        field: typeCode === "nat" ? "numeric_answers" : "options",
+        code: "VALIDATION_KEY_REQUIRED_ON_PUBLISH",
+        message:
+          "Answer key required before publishing (MCQ: exactly one correct option, MSQ: at least one correct option, NAT: at least one finite numeric value).",
+      },
+    ]);
+  }
+
   const result = await questionsRepo.publishQuestion(id, actorId, undefined);
   await writeAuditEntry({
     actorId,
@@ -391,7 +425,7 @@ export async function importQuestions(actorId: string, items: Array<Record<strin
   const { prisma } = await import("../repositories/prisma");
   for (let index = 0; index < items.length; index += 1) {
     try {
-      const input = await validateQuestionInput(items[index], "create");
+      const input = await validateQuestionInput(items[index], "create", { allowKeylessDraft: true });
       await assertActiveTaxonomy(input.subjectId, input.topicId);
 
       if (input.sourceId && input.questionNumber !== undefined) {
