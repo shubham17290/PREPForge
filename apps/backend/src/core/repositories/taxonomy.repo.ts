@@ -165,6 +165,16 @@ export async function deactivateTopic(id: string): Promise<void> {
   await prisma.topic.update({ where: { id }, data: { isActive: false } });
 }
 
+/**
+ * PHASE 12F.2-T1 — read-only question-type resolution for the PYQ importer.
+ * Deliberately does NOT create the row (unlike ensureQuestionType): the importer
+ * must fail pre-flight when the configured type is not resolvable rather than
+ * inventing reference data.
+ */
+export async function findQuestionTypeByCode(code: string): Promise<{ id: string; code: string } | null> {
+  return prisma.questionType.findUnique({ where: { code }, select: { id: true, code: true } });
+}
+
 /** Question-type lookup get-or-create (Phase 3 §13.2: extensible sets need no DDL). */
 export async function ensureQuestionType(code: string): Promise<{ id: string; code: string }> {
   const defaults: Record<string, { name: string; has_options: boolean; has_numeric: boolean; supports_multiple: boolean }> = {

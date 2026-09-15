@@ -244,6 +244,67 @@ export async function createQuestion(
   });
 }
 
+// PHASE 12F.2-T1 — PYQ importer helpers. Additive only; existing reads/writes are
+// untouched. The importer needs (a) a name-based source lookup — the deterministic
+// `name` is the ONLY DB-enforced dedupe anchor for papers whose paperNumber/shift
+// are NULL, because Postgres treats NULLs as distinct in uq_question_sources_identity
+// — and (b) an atomic "source + question + children" create, since createQuestion
+// only attaches to a pre-existing source.
+
+export async function findQuestionSourceByName(name: string) {
+  return prisma.questionSource.findFirst({
+    where: { name },
+    select: { id: true, name: true, examYear: true, paperNumber: true, shift: true, questionNumber: true },
+  });
+}
+
+export async function findQuestionBySourceId(sourceId: string) {
+  return prisma.question.findFirst({
+    where: { sourceId },
+    select: { id: true, status: true, gateYear: true, version: true },
+  });
+}
+
+export async function createQuestionWithSource(
+  source: { name: string; examYear: number; paperNumber: string | null; shift: string | null; questionNumber: number },
+  input: QuestionWriteInput,
+  typeId: string,
+  createdById: string,
+): Promise<{ sourceId: string; questionId: string }> {
+  const content = replaceContentData(input);
+  return prisma.$transaction(async (tx) => {
+    const created = await tx.questionSource.create({
+      data: {
+        name: source.name,
+        examYear: source.examYear,
+        paperNumber: source.paperNumber,
+        shift: source.shift,
+        questionNumber: source.questionNumber,
+      },
+      select: { id: true },
+    });
+    const question = await tx.question.create({
+      data: {
+        questionTypeId: typeId,
+        subjectId: input.subjectId,
+        topicId: input.topicId ?? null,
+        body: input.body,
+        explanation: input.explanation ?? null,
+        marks: input.marks,
+        negativeMarks: input.negativeMarks ?? null,
+        difficulty: input.difficulty,
+        gateYear: input.gateYear,
+        sourceId: created.id,
+        createdById,
+        options: { create: content.options },
+        numericAnswers: { create: content.numericAnswers },
+      },
+      select: { id: true },
+    });
+    return { sourceId: created.id, questionId: question.id };
+  });
+}
+
 export async function findQuestionBySourceIdentity(
   examYear: number,
   paperNumber: string | null,
