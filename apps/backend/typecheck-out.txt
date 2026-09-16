@@ -1,0 +1,35 @@
+﻿
+> backend@0.1.0 typecheck
+> tsc --noEmit -p tsconfig.json
+
+src/__tests__/pyq-import.test.ts(433,12): error TS18047: 'result.verification' is possibly 'null'.
+src/__tests__/pyq-import.test.ts(434,12): error TS18047: 'result.verification' is possibly 'null'.
+src/__tests__/pyq-import.test.ts(435,12): error TS18047: 'result.verification' is possibly 'null'.
+src/__tests__/pyq-import.test.ts(436,12): error TS18047: 'result.verification' is possibly 'null'.
+src/__tests__/pyq-import.test.ts(521,12): error TS18047: 'second.verification' is possibly 'null'.
+src/__tests__/pyq-import.test.ts(522,12): error TS18047: 'second.verification' is possibly 'null'.
+src/api/practice/practice.routes.ts(51,40): error TS2339: Property 'createSession' does not exist on type 'typeof import("D:/005 Projects/gate cs and it pyq acer/apps/backend/src/core/services/practice.service")'.
+src/api/practice/practice.routes.ts(93,67): error TS2554: Expected 1 arguments, but got 3.
+src/api/practice/practice.routes.ts(98,20): error TS2339: Property 'created' does not exist on type 'void'.
+src/api/practice/practice.routes.ts(98,48): error TS2339: Property 'payload' does not exist on type 'void'.
+src/api/practice/practice.routes.ts(119,40): error TS2339: Property 'completeSession' does not exist on type 'typeof import("D:/005 Projects/gate cs and it pyq acer/apps/backend/src/core/services/practice.service")'.
+src/api/practice/practice.routes.ts(135,40): error TS2339: Property 'getResult' does not exist on type 'typeof import("D:/005 Projects/gate cs and it pyq acer/apps/backend/src/core/services/practice.service")'.
+src/ingestion/pdf-extractor.ts(6,34): error TS1343: The 'import.meta' meta-property is only allowed when the '--module' option is 'es2020', 'es2022', 'esnext', 'system', 'node16', 'node18', 'node20', or 'nodenext'.
+src/ingestion/pdf-extractor.ts(76,18): error TS2341: Property 'load' is private and only accessible within class 'PDFParse'.
+src/ingestion/pdf-extractor.ts(103,27): error TS2341: Property 'doc' is private and only accessible within class 'PDFParse'.
+src/ingestion/question-parser.ts(60,7): error TS6133: 'OPTION_PATTERNS' is declared but its value is never read.
+src/ingestion/question-parser.ts(71,7): error TS6133: 'STANDALONE_OPTION_LABEL_PATTERN' is declared but its value is never read.
+src/ingestion/staging.ts(6,34): error TS1343: The 'import.meta' meta-property is only allowed when the '--module' option is 'es2020', 'es2022', 'esnext', 'system', 'node16', 'node18', 'node20', or 'nodenext'.
+node.exe : npm error Lifecycle script `typecheck` failed with error:
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (npm error Lifec...led with error::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+npm error code 2
+npm error path D:\005 Projects\gate cs and it pyq acer\apps\backend
+npm error workspace backend@0.1.0
+npm error location D:\005 Projects\gate cs and it pyq acer\apps\backend
+npm error command failed
+npm error command C:\WINDOWS\system32\cmd.exe /d /s /c tsc --noEmit -p tsconfig.json

@@ -1,379 +1,210 @@
-// PHASE 12G-T10 — Practice Service Layer (thin business logic over 12G-T9 repositories)
+﻿// PHASE 12G-T10 Practice Service Layer
 import { errors } from "../errors";
-import * as practiceRepo from "../repositories/practice.repo";
-import type {
-  SessionRow,
-  SessionWithAnswersRow,
-  PracticeQuestionAnswerUpsertInput,
-  FrozenPoolSnapshot,
-  SelectionMetadata,
+
+import {
+  createSession,
+  findSessionByIdAndOwner,
+  listAnswersForSession,
+  parseSessionConfig,
+  SessionConfig,
+  upsertAnswer,
 } from "../repositories/practice.repo";
-
-// ─── Types ──────────────────────────────────────────────────────────────────────
-
-export interface CreatePracticeSessionInput {
-  userId: string;
-  modeId: string;
-  config: {
-    mode: string;
-    filters: {
-      subject_id?: string;
-      topic_id?: string;
-      year?: number;
-      difficulty?: string;
-      question_types?: string[];
-    };
-    question_count: number;
-    pool: string[] | null;
-  };
-  timed: boolean;
-  totalQuestions: number;
-  frozenPoolSnapshot?: FrozenPoolSnapshot;
-  selectionMetadata?: SelectionMetadata;
-}
-
-export interface PracticeSessionDTO {
-  id: string;
-  userId: string;
-  modeId: string;
-  status: string;
-  timed: boolean;
-  totalQuestions: number;
-  score: number | null;
-  startedAt: string | null;
-  endedAt: string | null;
-  abandonedAt: string | null;
-  config: unknown;
-  mode: { id: string; code: string; name: string };
-}
-
-export interface PracticeAnswerDTO {
-  id: string;
-  sessionId: string;
-  questionId: string;
-  questionVersionId: string;
-  selectedAnswers: unknown;
-  correct: boolean;
-  score: number;
-  negativeMarksApplied: boolean;
-  markedForReview: boolean;
-  answerState: "unanswered" | "answered" | "skipped" | "review";
-  timeTakenSeconds: number;
-  answeredAt: string;
-  responseVersion: number;
-}
-
-export interface PracticeSessionWithAnswersDTO {
-  session: PracticeSessionDTO;
-  answers: PracticeAnswerDTO[];
-}
-
-// ─── Helpers ────────────────────────────────────────────────────────────────────
-
-function toSessionDTO(row: SessionRow): PracticeSessionDTO {
-  return {
-    id: row.id,
-    userId: row.userId,
-    modeId: row.modeId,
-    status: row.status,
-    timed: row.timed,
-    totalQuestions: row.totalQuestions,
-    score: row.score ? Number(row.score) : null,
-    startedAt: row.startedAt ? row.startedAt.toISOString() : null,
-    endedAt: row.endedAt ? row.endedAt.toISOString() : null,
-    abandonedAt: row.abandonedAt ? row.abandonedAt.toISOString() : null,
-    config: row.config,
-    mode: row.mode,
-  };
-}
-
-function toSessionWithAnswersDTO(
-  sessionRow: SessionWithAnswersRow
-): PracticeSessionWithAnswersDTO {
-  const answers: PracticeAnswerDTO[] = (sessionRow.attempts || []).map((attempt) => ({
-    id: attempt.id,
-    sessionId: sessionRow.id,
-    questionId: attempt.questionVersionId,
-    questionVersionId: attempt.questionVersionId,
-    selectedAnswers: attempt.selectedAnswers,
-    correct: attempt.isCorrect,
-    score: Number(attempt.marks),
-    negativeMarksApplied: false,
-    markedForReview: false,
-    answerState: "answered" as const,
-    timeTakenSeconds: attempt.timeTakenSeconds,
-    answeredAt: attempt.answeredAt.toISOString(),
-    responseVersion: attempt.responseVersion,
-  }));
-
-  return {
-    session: toSessionDTO(sessionRow as unknown as SessionRow),
-    answers,
-  };
-}
-
-// ─── Service Operations ─────────────────────────────────────────────────────────
-
-/**
- * Create a new Practice session.
- *
- * Rules:
- * - Validates basic input
- * - Preserves selection metadata when supplied
- * - Persists frozenPoolSnapshot when supplied
- * - Creates session with initial 'pending' status
- * - Does NOT select questions or generate pools
- */
-export async function createPracticeSession(
-  input: CreatePracticeSessionInput
-): Promise<PracticeSessionDTO> {
-  // Basic validation
-  if (!input.userId) {
-    throw errors.malformed("User ID is required.");
-  }
-  if (!input.modeId) {
-    throw errors.malformed("Mode ID is required.");
-  }
-  if (input.totalQuestions <= 0) {
-    throw errors.malformed("Total questions must be positive.");
-  }
-
-  // Create session
-  const session = await practiceRepo.createSession({
-    userId: input.userId,
-    modeId: input.modeId,
-    config: input.config,
-    timed: input.timed,
-    totalQuestions: input.totalQuestions,
-  });
-
-  // Persist frozen pool snapshot if supplied
-  if (input.frozenPoolSnapshot) {
-    await practiceRepo.saveFrozenPoolSnapshot(session.id, input.frozenPoolSnapshot);
-  }
+import { prisma } from "../repositories/prisma";
 
 
-/**
- * Get a Practice session by ID for the owning user.
- *
- * Rules:
- * - Uses owner-scoped lookup
- * - Returns 404 if session doesn't exist or doesn't belong to user
- * - Does NOT expose answer-key information
- */
-export async function getPracticeSession(
-  sessionId: string,
-  userId: string
-): Promise<PracticeSessionDTO> {
-  const session = await loadOwnedSession(sessionId, userId);
-  return toSessionDTO(session);
-}
 
-/**
- * Activate a Practice session.
- *
- * Allowed transition: pending → active
- * Rejected transitions: active → active, submitted → active
- *
- * Rules:
- * - Verifies session ownership
- * - Only allows activation from 'pending' status
- * - Rejects activation from 'active' or 'submitted' status
- * - Does NOT implement submission
- */
-export async function activatePracticeSession(
-  sessionId: string,
-  userId: string
-): Promise<PracticeSessionDTO> {
-  const session = await loadOwnedSession(sessionId, userId);
-
-  // Validate status transition
-  if (session.status === "submitted") {
-    throw errors.conflict(
-      "SUBMITTED_SESSION_IMMUTABLE",
-      "Cannot activate a submitted session."
-    );
-  }
-
-  if (session.status === "active") {
-    throw errors.conflict(
-      "INVALID_SESSION_STATE",
-      "Session is already active."
-    );
-
-/**
- * Save or update a Practice answer.
- *
- * Rules:
- * - Verifies session ownership
- * - Verifies session is 'active'
- * - Rejects modification of 'submitted' sessions
- * - Does NOT calculate correctness, score, or negative marks
- * - Does NOT expose correct answers
- * - Only persists student's answer state and review flag
- */
-export async function savePracticeAnswer(
-  sessionId: string,
-  userId: string,
-  questionId: string,
-  questionVersionId: string,
-  answerState: "unanswered" | "answered" | "skipped" | "review",
-  markedForReview: boolean,
-  selectedAnswers: unknown,
-  timeTakenSeconds: number
-): Promise<PracticeAnswerDTO> {
-  // Verify session ownership and get session
-  const session = await loadOwnedSession(sessionId, userId);
-
-  // Validate session status
-  if (session.status === "submitted") {
-    throw errors.conflict(
-      "SUBMITTED_SESSION_IMMUTABLE",
-      "Cannot modify answers in a submitted session."
-    );
-  }
-
-  if (session.status !== "active") {
-    throw errors.conflict(
-      "INVALID_SESSION_STATE",
-      `Cannot save answers to a '${session.status}' session. Session must be 'active'.`
-    );
-  }
-
-  // Prepare answer input for repository
-  const answerInput: PracticeQuestionAnswerUpsertInput = {
-    sessionId,
-    userId,
-    questionVersionId,
-    questionId,
-    selectedAnswers,
-    correct: false,
-    score: 0,
-    negativeMarksApplied: false,
-    markedForReview,
-    answerState,
-    timeTakenSeconds,
-  };
-
-  // Persist through repository
-  const attempt = await practiceRepo.upsertAnswer(answerInput);
-
-
-// ─── Status Constants ───────────────────────────────────────────────────────────
-
-export const PracticeSessionStatus = {
+const STATUS = {
   PENDING: "pending",
   ACTIVE: "active",
   SUBMITTED: "submitted",
 } as const;
 
-export type PracticeSessionStatus = (typeof PracticeSessionStatus)[keyof typeof PracticeSessionStatus];
+export interface CreateSessionInput {
+  userId: string;
+  modeId?: string;
+  config?: SessionConfig;
+  timed?: boolean;
+  totalQuestions: number;
+  frozenPoolSnapshot?: unknown;
+  selectionMetadata?: unknown;
+}
 
-  // Convert to DTO
+export interface SaveAnswerInput {
+  sessionId: string;
+  userId: string;
+  questionId: string;
+  questionNumber?: number;
+  answerState?: string;
+  markedForReview?: boolean;
+  selectedAnswers?: string[] | null;
+  numericAnswer?: number | null;
+  negativeMarksApplied?: number;
+}
+
+export interface SessionDTO {
+  id: string;
+  userId: string;
+  modeId: string;
+  status: string;
+  totalQuestions: number;
+  timed: boolean;
+  config: SessionConfig;
+  createdAt: Date;
+  updatedAt: Date;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  frozenPoolSnapshot?: unknown;
+  selectionMetadata?: unknown;
+  attempts?: any[];
+}
+
+async function toSessionDTO(session: any): Promise<SessionDTO> {
+  let parsedConfig: SessionConfig = {
+    mode: "default",
+    filters: {},
+    question_count: session.totalQuestions ?? 0,
+    pool: null,
+  };
+
+  if (session.config) {
+    try {
+      parsedConfig = await parseSessionConfig(session.config);
+    } catch {
+      parsedConfig = session.config;
+    }
+  }
+
   return {
-    id: attempt.id,
-    sessionId: attempt.sessionId,
-    questionId: attempt.questionVersionId,
-    questionVersionId: attempt.questionVersionId,
-    selectedAnswers: attempt.selectedAnswers,
-    correct: attempt.isCorrect,
-    score: Number(attempt.marks),
-    negativeMarksApplied: false,
-    markedForReview: false,
-    answerState: "answered" as const,
-    timeTakenSeconds: attempt.timeTakenSeconds,
-    answeredAt: attempt.answeredAt.toISOString(),
-    responseVersion: attempt.responseVersion,
+    id: session.id,
+    userId: session.userId,
+    modeId: session.modeId,
+    status: session.status,
+    totalQuestions: session.totalQuestions,
+    timed: session.timed,
+    config: parsedConfig,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+    startedAt: session.startedAt,
+    completedAt: session.completedAt,
+    frozenPoolSnapshot: (parsedConfig as any).frozenPoolSnapshot,
+    selectionMetadata: (parsedConfig as any).selectionMetadata,
+    attempts: session.answers,
   };
 }
 
-/**
- * Get all answers for a Practice session.
- *
- * Rules:
- * - Verifies session ownership
- * - Returns persisted student answer state only
- * - Does NOT calculate score or result
- * - Does NOT expose correct_answer data
- */
-export async function getPracticeSessionAnswers(
-  sessionId: string,
-  userId: string
-): Promise<PracticeSessionWithAnswersDTO> {
-  // Verify ownership
-  await loadOwnedSession(sessionId, userId);
-
-  // Get session with answers
-  const sessionWithAnswers = await practiceRepo.findSessionWithAnswersByIdAndOwner(
-    sessionId,
-    userId
-  );
-
-  if (!sessionWithAnswers) {
-    throw errors.notFound("SESSION_NOT_FOUND", "Practice session not found.");
+export async function createPracticeSession(input: CreateSessionInput): Promise<SessionDTO> {
+  if (!input.userId) {
+    throw errors.validation([{ field: "userId", code: "MISSING", message: "userId is required" }]);
+  }
+  if (!input.modeId) {
+    throw errors.validation([{ field: "modeId", code: "MISSING", message: "modeId is required" }]);
+  }
+  if (!input.totalQuestions || input.totalQuestions <= 0) {
+    throw errors.validation([{ field: "totalQuestions", code: "INVALID", message: "totalQuestions must be a positive number" }]);
   }
 
-  return toSessionWithAnswersDTO(sessionWithAnswers);
-}
+  const config = input.config ?? {
+    mode: "default",
+    filters: {},
+    question_count: input.totalQuestions,
+    pool: null,
+  };
 
+  if (input.frozenPoolSnapshot) {
+    (config as any).frozenPoolSnapshot = input.frozenPoolSnapshot;
   }
-
-  if (session.status !== "pending") {
-    throw errors.conflict(
-      "INVALID_SESSION_STATE",
-      `Cannot activate session from '${session.status}' status. Only 'pending' sessions can be activated.`
-    );
-  }
-
-  // Activate the session
-  await practiceRepo.updateSessionStatus(sessionId, "active", {
-    startedAt: new Date(),
-  });
-
-  const refreshedSession = await practiceRepo.findSessionById(sessionId);
-  if (!refreshedSession) {
-    throw errors.notFound("SESSION_NOT_FOUND", "Failed to retrieve activated session.");
-  }
-
-  return toSessionDTO(refreshedSession);
-}
-
-  // Persist selection metadata if supplied
   if (input.selectionMetadata) {
-    await practiceRepo.saveSelectionMetadata(session.id, input.selectionMetadata);
+    (config as any).selectionMetadata = input.selectionMetadata;
   }
 
-  // Update status to pending
-  await practiceRepo.updateSessionStatus(session.id, "pending");
-
-  const refreshedSession = await practiceRepo.findSessionById(session.id);
-  if (!refreshedSession) {
-    throw errors.notFound("SESSION_NOT_FOUND", "Failed to retrieve created session.");
-  }
-
-  return toSessionDTO(refreshedSession);
+  const session = await createSession({
+    userId: input.userId,
+    modeId: input.modeId,
+    config: config as SessionConfig,
+    timed: input.timed ?? false,
+    totalQuestions: input.totalQuestions,
+  });
+  return await toSessionDTO(session);
 }
 
-    markedForReview: false,
-    answerState: "answered" as const,
-    timeTakenSeconds: attempt.timeTakenSeconds,
-    answeredAt: attempt.answeredAt.toISOString(),
-    responseVersion: attempt.responseVersion,
-  }));
-
-  return {
-    session: toSessionDTO(sessionRow as unknown as SessionRow),
-    answers,
-  };
-}
-
-async function loadOwnedSession(
-  sessionId: string,
-  userId: string
-): Promise<SessionRow> {
-  const session = await practiceRepo.findSessionByIdAndOwner(sessionId, userId);
+export async function getPracticeSession(sessionId: string, userId: string): Promise<SessionDTO> {
+  const session = await findSessionByIdAndOwner(sessionId, userId);
   if (!session) {
-    throw errors.notFound("SESSION_NOT_FOUND", "Practice session not found.");
+    throw errors.notFound("SESSION_NOT_FOUND", `Session ${sessionId} not found or not owned`);
   }
-  return session;
+  return await toSessionDTO(session);
 }
+
+export async function activatePracticeSession(sessionId: string, userId: string): Promise<SessionDTO> {
+  const session = await findSessionByIdAndOwner(sessionId, userId);
+  if (!session) {
+    throw errors.notFound("SESSION_NOT_FOUND", `Session ${sessionId} not found or not owned`);
+  }
+
+  const currentStatus = session.status;
+  if (currentStatus === STATUS.PENDING) {
+    const updated = await prisma.practiceSession.update({
+      where: { id: sessionId },
+      data: {
+        status: STATUS.ACTIVE,
+        startedAt: session.startedAt ?? new Date(),
+      },
+    });
+    return await toSessionDTO(updated);
+  }
+
+  if (currentStatus === STATUS.ACTIVE) {
+    throw errors.conflict("INVALID_SESSION_STATE", "Session is already active");
+  }
+
+  if (currentStatus === STATUS.SUBMITTED) {
+    throw errors.conflict("SUBMITTED_SESSION_IMMUTABLE", "Cannot activate a submitted session");
+  }
+
+  throw errors.conflict("INVALID_SESSION_STATE", `Cannot activate from status '${currentStatus}'`);
+}
+
+export async function savePracticeAnswer(input: SaveAnswerInput): Promise<void> {
+  const session = await findSessionByIdAndOwner(input.sessionId, input.userId);
+  if (!session) {
+    throw errors.notFound("SESSION_NOT_FOUND", `Session ${input.sessionId} not found or not owned`);
+  }
+
+  if (session.status === STATUS.SUBMITTED) {
+    throw errors.conflict("SUBMITTED_SESSION_IMMUTABLE", "Cannot modify answers for a submitted session");
+  }
+
+  if (session.status !== STATUS.ACTIVE) {
+    throw errors.conflict("INVALID_SESSION_STATE", `Cannot save answer in status "${session.status}"`);
+  }
+
+  const upsertInput: Parameters<typeof upsertAnswer>[0] = {
+    sessionId: input.sessionId,
+    userId: input.userId,
+    questionId: input.questionId,
+    questionVersionId: input.questionId,
+    sequence: input.questionNumber ?? 0,
+    questionNumber: input.questionNumber,
+    answerState: input.answerState ?? (input.selectedAnswers && input.selectedAnswers.length > 0 ? "answered" : "unanswered"),
+    markedForReview: input.markedForReview ?? false,
+    selectedAnswers: input.selectedAnswers ?? undefined,
+    numericAnswer: input.numericAnswer,
+    negativeMarksApplied: input.negativeMarksApplied ?? 0,
+  };
+
+  await upsertAnswer(upsertInput);
+}
+
+export async function getPracticeSessionAnswers(sessionId: string, userId: string): Promise<any[]> {
+  const session = await findSessionByIdAndOwner(sessionId, userId);
+  if (!session) {
+    throw errors.notFound("SESSION_NOT_FOUND", `Session ${sessionId} not found or not owned`);
+  }
+  return listAnswersForSession(sessionId);
+}
+
+// Compatibility aliases for routes
+export const startSession = activatePracticeSession;
+export const recordAttempt = savePracticeAnswer;
+export const getSessionState = getPracticeSession;
+

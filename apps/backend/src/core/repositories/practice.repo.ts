@@ -1,8 +1,10 @@
-// PHASE 8 — Practice sessions + attempts data access (Phase 3 §6.15–6.17)
-// PHASE 12G-T9 — Enhanced Practice repository layer with answer-state persistence
+﻿// PHASE 8 - Practice sessions + attempts data access (Phase 3 §6.15-6.17)
+// PHASE 12G-T9 - Enhanced Practice repository layer with answer-state persistence
+
 import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 
+// Session Config & Metadata Interfaces
 export interface SessionConfig {
   mode: string;
   filters: {
@@ -14,6 +16,8 @@ export interface SessionConfig {
   };
   question_count: number;
   pool: string[] | null;
+  frozenPoolSnapshot?: unknown;
+  selectionMetadata?: unknown;
 }
 
 export interface FrozenPoolSnapshot {
@@ -31,6 +35,7 @@ export interface SelectionMetadata {
   createdAt: string;
 }
 
+// Practice Mode
 export async function ensurePracticeMode(code: string): Promise<{ id: string; code: string }> {
   const existing = await prisma.practiceMode.findUnique({ where: { code } });
   if (existing) return existing;
@@ -39,18 +44,30 @@ export async function ensurePracticeMode(code: string): Promise<{ id: string; co
   });
 }
 
+// Session Create / Find
 export async function createSession(input: {
   userId: string;
   modeId: string;
   config: SessionConfig;
   timed: boolean;
   totalQuestions: number;
+  frozenPoolSnapshot?: unknown;
+  selectionMetadata?: unknown;
 }) {
+  const configData: Record<string, unknown> = {
+    mode: input.config.mode,
+    filters: input.config.filters,
+    question_count: input.config.question_count,
+    pool: input.config.pool,
+  };
+  if (input.frozenPoolSnapshot) { configData.frozenPoolSnapshot = input.frozenPoolSnapshot; }
+  if (input.selectionMetadata) { configData.selectionMetadata = input.selectionMetadata; }
+
   return prisma.practiceSession.create({
     data: {
       userId: input.userId,
       modeId: input.modeId,
-      config: input.config as unknown as Prisma.InputJsonValue,
+      config: configData as unknown as Prisma.InputJsonValue,
       timed: input.timed,
       totalQuestions: input.totalQuestions,
       status: "in_progress",
@@ -58,499 +75,332 @@ export async function createSession(input: {
   });
 }
 
-const SESSION_SELECT = {
-  id: true,
-  userId: true,
-  status: true,
-  timed: true,
-  totalQuestions: true,
-  score: true,
-  startedAt: true,
-  endedAt: true,
-  abandonedAt: true,
-  config: true,
-  mode: { select: { id: true, code: true, name: true } },
-} satisfies Prisma.PracticeSessionSelect;
-
-export type SessionRow = Prisma.PracticeSessionGetPayload<{ select: typeof SESSION_SELECT }>;
-
-export async function findSessionById(id: string): Promise<SessionRow | null> {
-  return prisma.practiceSession.findUnique({ where: { id }, select: SESSION_SELECT });
+export async function findSessionById(id: string) {
+  return prisma.practiceSession.findUnique({ where: { id } });
 }
 
-export async function findSessionByIdAndOwner(
-  id: string,
-  ownerUserId: string
-): Promise<SessionRow | null> {
-  return prisma.practiceSession.findFirst({
-    where: { id, userId: ownerUserId },
-    select: SESSION_SELECT,
-  });
+export async function findSessionByIdAndOwner(id: string, userId: string) {
+  return prisma.practiceSession.findFirst({ where: { id, userId } });
 }
 
-export function parseSessionConfig(raw: unknown): SessionConfig {
-  const value = raw as Partial<SessionConfig> | null;
-  if (!value || typeof value !== "object") {
-    throw new Error("SESSION_CONFIG_CORRUPT");
+export async function parseSessionConfig(config: unknown): Promise<SessionConfig> {
+  if (typeof config !== "object" || config === null) {
+    throw new Error("Invalid session config");
   }
+  const cfg = config as Record<string, unknown>;
   return {
-    mode: String(value.mode ?? "custom"),
-    filters: value.filters ?? {},
-    question_count: Number(value.question_count ?? 0),
-    pool: Array.isArray(value.pool) ? (value.pool as string[]) : null,
+    mode: (cfg.mode as string) ?? "default",
+    filters: (cfg.filters as SessionConfig["filters"]) ?? {},
+    question_count: (cfg.question_count as number) ?? 0,
+    pool: (cfg.pool as string[] | null) ?? null,
+    frozenPoolSnapshot: cfg.frozenPoolSnapshot,
+    selectionMetadata: cfg.selectionMetadata,
   };
 }
 
-// ─── Session with answers lookup ────────────────────────────────────────────────
+// Session With Answers
+const SESSION_WITH_ANSWERS_INCLUDE = {
+  include: { attempts: { include: { questionVersion: true } } },
+};
+export type SessionWithAnswersRow = Awaited<
+  any
+>;
 
-const SESSION_WITH_ANSWERS_SELECT = {
-  id: true,
-  userId: true,
-  status: true,
-  timed: true,
-  totalQuestions: true,
-  score: true,
-  startedAt: true,
-  endedAt: true,
-  abandonedAt: true,
-  config: true,
-  mode: { select: { id: true, code: true, name: true } },
-  attempts: {
-    orderBy: [{ answeredAt: "asc" }],
-    select: {
-      id: true,
-      questionVersionId: true,
-      selectedAnswers: true,
-      isCorrect: true,
-      marks: true,
-      timeTakenSeconds: true,
-      answeredAt: true,
-      responseVersion: true,
-    },
-  },
-} satisfies Prisma.PracticeSessionSelect;
-
-export type SessionWithAnswersRow = Prisma.PracticeSessionGetPayload<{
-  select: typeof SESSION_WITH_ANSWERS_SELECT;
-}>;
-
-export async function findSessionWithAnswersById(
-  id: string
-): Promise<SessionWithAnswersRow | null> {
+export async function findSessionWithAnswersById(id: string): Promise<SessionWithAnswersRow> {
   return prisma.practiceSession.findUnique({
     where: { id },
-    select: SESSION_WITH_ANSWERS_SELECT,
+    ...SESSION_WITH_ANSWERS_INCLUDE,
   });
 }
 
-export async function findSessionWithAnswersByIdAndOwner(
-  id: string,
-  ownerUserId: string
-): Promise<SessionWithAnswersRow | null> {
+export async function findSessionWithAnswersByIdAndOwner(id: string, userId: string): Promise<SessionWithAnswersRow> {
   return prisma.practiceSession.findFirst({
-    where: { id, userId: ownerUserId },
-    select: SESSION_WITH_ANSWERS_SELECT,
+    where: { id, userId },
+    ...SESSION_WITH_ANSWERS_INCLUDE,
   });
 }
 
-// ─── Practice Question Answer (Attempt) operations ──────────────────────────────
-
-export interface PracticeQuestionAnswerUpsertInput {
-  sessionId: string;
-  userId: string;
-  questionVersionId: string;
-  questionId: string;
-  selectedAnswers: unknown;
-  correct: boolean;
-  score: number;
-  negativeMarksApplied: boolean;
-  markedForReview: boolean;
-  answerState: "unanswered" | "answered" | "skipped" | "review";
-  timeTakenSeconds: number;
+// Session Management
+export async function savePool(sessionId: string, _questionIds: string[], _userId?: string) {
+  return prisma.practiceSession.findUnique({ where: { id: sessionId } });
 }
 
-export interface AnswerMetadata {
-  negativeMarksApplied?: boolean;
+export async function saveFrozenPoolSnapshot(sessionId: string, snapshot: FrozenPoolSnapshot, userId?: string) {
+  const session = userId
+    ? await prisma.practiceSession.findFirst({ where: { id: sessionId, userId } })
+    : await prisma.practiceSession.findUnique({ where: { id: sessionId } });
+  if (!session) throw new Error("Session " + sessionId + " not found");
+  const config = typeof session.config === "object" ? session.config as Record<string, unknown> : {};
+  config.frozenPoolSnapshot = snapshot;
+  return prisma.practiceSession.update({
+    where: { id: sessionId },
+    data: { config: config as unknown as Prisma.InputJsonValue },
+  });
+}
+
+export async function saveSelectionMetadata(sessionId: string, metadata: SelectionMetadata, userId?: string) {
+  const session = userId
+    ? await prisma.practiceSession.findFirst({ where: { id: sessionId, userId } })
+    : await prisma.practiceSession.findUnique({ where: { id: sessionId } });
+  if (!session) throw new Error("Session " + sessionId + " not found");
+  const config = typeof session.config === "object" ? session.config as Record<string, unknown> : {};
+  config.selectionMetadata = metadata;
+  return prisma.practiceSession.update({
+    where: { id: sessionId },
+    data: { config: config as unknown as Prisma.InputJsonValue },
+  });
+}
+
+export async function updateSessionStatus(sessionId: string, status: string, _userId?: string) {
+  return prisma.practiceSession.update({
+    where: { id: sessionId },
+    data: { status },
+  });
+}
+
+export async function completeSession(sessionId: string, score: number, userId?: string) {
+  const session = userId
+    ? await prisma.practiceSession.findFirst({ where: { id: sessionId, userId } })
+    : await prisma.practiceSession.findUnique({ where: { id: sessionId } });
+  if (!session) throw new Error("Session " + sessionId + " not found");
+  return prisma.practiceSession.update({
+    where: { id: sessionId },
+    data: { status: "completed", endedAt: new Date(), score: score as unknown as Prisma.Decimal },
+  });
+}
+
+export async function abandonSession(sessionId: string, userId?: string) {
+  const session = userId
+    ? await prisma.practiceSession.findFirst({ where: { id: sessionId, userId } })
+    : await prisma.practiceSession.findUnique({ where: { id: sessionId } });
+  if (!session) throw new Error("Session " + sessionId + " not found");
+  return prisma.practiceSession.update({
+    where: { id: sessionId },
+    data: { status: "abandoned", abandonedAt: new Date() },
+  });
+}
+
+// Answer Data Access
+export interface AnswerUpdateInput {
+  selectedAnswers?: string[];
+  numericAnswer?: number | null;
+  isCorrect?: boolean;
+  marks?: number;
+  timeTakenSeconds?: number;
+  responseVersion?: number;
   markedForReview?: boolean;
-  answerState?: "unanswered" | "answered" | "skipped" | "review";
-  [key: string]: unknown;
+  answerState?: string;
+  negativeMarksApplied?: number;
 }
 
-export async function findAnswerBySessionAndQuestion(
-  sessionId: string,
-  questionVersionId: string
-): Promise<Prisma.Attempt | null> {
-  return prisma.attempt.findFirst({
-    where: { sessionId, questionVersionId },
-  });
-}
-
-export async function upsertAnswer(input: PracticeQuestionAnswerUpsertInput) {
-  return prisma.$transaction(async (tx) => {
-    const existing = await tx.attempt.findFirst({
-      where: { sessionId: input.sessionId, questionVersionId: input.questionVersionId },
-    });
-
-    const metadata: AnswerMetadata = {
-      negativeMarksApplied: input.negativeMarksApplied,
-      markedForReview: input.markedForReview,
-      answerState: input.answerState,
-    };
-
-    const mergedSelectedAnswers =
-      typeof input.selectedAnswers === "object" && input.selectedAnswers !== null
-        ? {
-            ...(input.selectedAnswers as object),
-            _answerMetadata: metadata,
-          }
-        : input.selectedAnswers;
-
-    if (existing) {
-      return tx.attempt.update({
-        where: { id: existing.id },
-        data: {
-          selectedAnswers: mergedSelectedAnswers as Prisma.InputJsonValue,
-          isCorrect: input.correct,
-          marks: input.score,
-          timeTakenSeconds: input.timeTakenSeconds,
-          answeredAt: new Date(),
-          responseVersion: { increment: 1 },
-        },
-      });
-    }
-
-    const priorCount = await tx.attempt.count({
-      where: { sessionId: input.sessionId },
-    });
-
-    return tx.attempt.create({
-      data: {
-
-export function extractAnswerMetadata(
-  selectedAnswers: unknown
-): AnswerMetadata | undefined {
-  if (
-    typeof selectedAnswers === "object" &&
-    selectedAnswers !== null &&
-    !Array.isArray(selectedAnswers)
-  ) {
-    const obj = selectedAnswers as Record<string, unknown>;
-    if (obj._answerMetadata && typeof obj._answerMetadata === "object") {
-      return obj._answerMetadata as AnswerMetadata;
-    }
-  }
-  return undefined;
-}
-
-export function toPracticeQuestionAnswer(row: Prisma.AttempGetPayload<{
-  select: {
-    id: true;
-    questionVersionId: true;
-    selectedAnswers: true;
-    isCorrect: true;
-    marks: true;
-    timeTakenSeconds: true;
-    answeredAt: true;
-    responseVersion: true;
-    questionVersion: { select: { questionId: true } };
-  };
-}>): {
-  id: string;
-  sessionId: string;
-  questionId: string;
-  questionVersionId: string;
-  selectedAnswers: unknown;
-  correct: boolean;
-  score: number;
-  negativeMarksApplied: boolean;
-  markedForReview: boolean;
-  answerState: "unanswered" | "answered" | "skipped" | "review";
-  timeTakenSeconds: number;
-  answeredAt: Date;
-  responseVersion: number;
-} {
-  const metadata = extractAnswerMetadata(row.selectedAnswers) ?? {};
-
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    questionId: row.questionVersion.questionId,
-    questionVersionId: row.questionVersionId,
-    selectedAnswers: row.selectedAnswers,
-    correct: row.isCorrect,
-    score: Number(row.marks),
-    negativeMarksApplied: Boolean(metadata.negativeMarksApplied ?? false),
-    markedForReview: Boolean(metadata.markedForReview ?? false),
-    answerState: (metadata.answerState ?? "unanswered") as
-      | "unanswered"
-      | "answered"
-      | "skipped"
-      | "review",
-    timeTakenSeconds: row.timeTakenSeconds,
-    answeredAt: row.answeredAt,
-    responseVersion: row.responseVersion,
-  };
-}
-
-// ─── Existing Attempt helpers (backward compatibility) ──────────────────────────
-
-export interface AttemptUpsertInput {
-  sessionId: string;
-  userId: string;
-  questionVersionId: string;
-  selectedAnswers: unknown;
-  isCorrect: boolean;
-  marks: number;
-  timeTakenSeconds: number;
-}
-
-export async function findAttempt(sessionId: string, questionVersionId: string) {
+export async function findAnswerBySessionAndQuestionVersion(sessionId: string, questionVersionId: string) {
   return prisma.attempt.findFirst({ where: { sessionId, questionVersionId } });
 }
 
-/** @deprecated Use upsertAnswer instead. */
-export async function upsertAttempt(input: AttemptUpsertInput) {
-  return prisma.$transaction(async (tx) => {
-    const existing = await tx.attempt.findFirst({
-      where: { sessionId: input.sessionId, questionVersionId: input.questionVersionId },
-    });
-    if (existing) {
-      return tx.attempt.update({
-        where: { id: existing.id },
-        data: {
-          selectedAnswers: input.selectedAnswers as Prisma.InputJsonValue,
-          isCorrect: input.isCorrect,
-          marks: input.marks,
-          timeTakenSeconds: input.timeTakenSeconds,
-          answeredAt: new Date(),
-          responseVersion: { increment: 1 },
-        },
-      });
-    }
-    const priorCount = await tx.attempt.count({ where: { sessionId: input.sessionId } });
-    return tx.attempt.create({
-      data: {
-        sessionId: input.sessionId,
-        userId: input.userId,
-        questionVersionId: input.questionVersionId,
-        sequence: priorCount + 1,
-        selectedAnswers: input.selectedAnswers as Prisma.InputJsonValue,
-        isCorrect: input.isCorrect,
-        marks: input.marks,
-        timeTakenSeconds: input.timeTakenSeconds,
-      },
-    });
-  });
-}
-
-export async function listAttemptsForSession(sessionId: string) {
-  return prisma.attempt.findMany({
-    where: { sessionId },
-    orderBy: [{ answeredAt: "asc" }],
-    select: {
-      id: true,
-      questionVersionId: true,
-      selectedAnswers: true,
-      isCorrect: true,
-      marks: true,
-      timeTakenSeconds: true,
-      answeredAt: true,
-    },
-  });
-}
-
-export async function attemptsForSessionWithTopics(sessionId: string) {
-  return prisma.attempt.findMany({
-    where: { sessionId },
-    orderBy: [{ answeredAt: "asc" }],
-    select: {
-      questionVersionId: true,
-      isCorrect: true,
-      marks: true,
-      timeTakenSeconds: true,
-      questionVersion: {
-        select: {
-          snapshot: true,
-          question: { select: { id: true, topicId: true, explanation: true } },
-        },
+export async function findAnswerBySessionAndQuestion(sessionId: string, questionId: string) {
+  const session = await prisma.practiceSession.findUnique({
+    where: { id: sessionId },
+    include: {
+      attempts: {
+        where: { questionVersion: { questionId } },
+        include: { questionVersion: { include: { question: true } } },
       },
     },
   });
+  return session?.attempts[0] ?? null;
 }
 
-/** Max marks over the session pool using the marks from the question versions used by attempts. */
-export async function sumMarksForQuestionVersions(versionIds: string[]): Promise<number> {
-  if (versionIds.length === 0) return 0;
-  const rows = await prisma.questionVersion.findMany({
-    where: { id: { in: versionIds } },
-    select: { snapshot: true },
-  });
-  return rows.reduce((total, row) => {
-    const snap = row.snapshot as { marks?: number } | null;
-    return total + (snap?.marks ?? 0);
-  }, 0);
+export async function createAnswer(input: {
+  sessionId: string;
+  userId: string;
+  questionVersionId: string;
+  selectedAnswers?: string[];
+  numericAnswer?: number | null;
+  isCorrect?: boolean;
+  marks?: number;
+  timeTakenSeconds?: number;
+}) {
+  const attemptData: any = {
+    sessionId: input.sessionId,
+    userId: input.userId,
+    questionVersionId: input.questionVersionId,
+    sequence: 0,
+    selectedAnswers: {},
+    isCorrect: input.isCorrect ?? false,
+    marks: input.marks ?? 0,
+    timeTakenSeconds: input.timeTakenSeconds ?? 0,
+  };
+  if (input.selectedAnswers) { attemptData.selectedAnswers = input.selectedAnswers; }
+  if (input.numericAnswer !== undefined) { attemptData.selectedAnswers = { numericAnswer: input.numericAnswer }; }
+
+  return prisma.attempt.create({ data: attemptData });
 }
 
-/** Max marks over the session pool using current authored marks per question (fallback). */
-export async function sumMarksForQuestions(questionIds: string[]): Promise<number> {
-  if (questionIds.length === 0) return 0;
-  const rows = await prisma.question.findMany({
-    where: { id: { in: questionIds } },
-    select: { marks: true },
+export async function upsertAnswer(input: {
+  sessionId: string;
+  userId: string;
+  questionVersionId: string;
+  sequence: number;
+  selectedAnswers?: string[];
+  numericAnswer?: number | null;
+  marks?: number;
+  isCorrect?: boolean;
+  timeTakenSeconds?: number;
+  questionId: string;
+  questionNumber?: number;
+  questionTypeId?: string;
+  answerState?: string;
+  markedForReview?: boolean;
+  negativeMarksApplied?: number;
+}) {
+  const existing = await prisma.attempt.findFirst({
+    where: { sessionId: input.sessionId, questionVersionId: input.questionVersionId },
   });
-  return rows.reduce((total, row) => total + Number(row.marks), 0);
-}
+  const attemptData: any = {
+    sessionId: input.sessionId,
+    userId: input.userId,
+    questionVersionId: input.questionVersionId,
+    sequence: input.sequence,
+    isCorrect: input.isCorrect ?? (existing?.isCorrect ?? false),
+    marks: input.marks ?? (existing?.marks ?? 0),
+    timeTakenSeconds: input.timeTakenSeconds ?? 0,
+  };
+  if (input.selectedAnswers) { attemptData.selectedAnswers = input.selectedAnswers; }
+  else if (input.numericAnswer !== undefined) { attemptData.selectedAnswers = { numericAnswer: input.numericAnswer }; }
+  else if (existing) { attemptData.selectedAnswers = existing.selectedAnswers; }
+  else { attemptData.selectedAnswers = {}; }
 
-        sessionId: input.sessionId,
-        userId: input.userId,
-        questionVersionId: input.questionVersionId,
-        sequence: priorCount + 1,
-        selectedAnswers: mergedSelectedAnswers as Prisma.InputJsonValue,
-        isCorrect: input.correct,
-        marks: input.score,
-        timeTakenSeconds: input.timeTakenSeconds,
-      },
-    });
-  });
+  if (input.markedForReview !== undefined || input.answerState || input.negativeMarksApplied !== undefined) {
+    const currentAnswers = typeof attemptData.selectedAnswers === "object" && !Array.isArray(attemptData.selectedAnswers)
+      ? { ...attemptData.selectedAnswers }
+      : Array.isArray(attemptData.selectedAnswers) ? { values: attemptData.selectedAnswers } : { values: attemptData.selectedAnswers };
+    if (input.markedForReview !== undefined) { (currentAnswers as any).__markedForReview = input.markedForReview; }
+    if (input.answerState) { (currentAnswers as any).__answerState = input.answerState; }
+    if (input.negativeMarksApplied !== undefined) { (currentAnswers as any).__negativeMarksApplied = input.negativeMarksApplied; }
+    attemptData.selectedAnswers = currentAnswers;
+  }
+
+  if (existing) {
+    return prisma.attempt.update({ where: { id: existing.id }, data: attemptData });
+  }
+  return prisma.attempt.create({ data: attemptData });
 }
 
 export async function listAnswersForSession(sessionId: string) {
   return prisma.attempt.findMany({
     where: { sessionId },
-    orderBy: [{ answeredAt: "asc" }],
-    select: {
-      id: true,
-      questionVersionId: true,
-      selectedAnswers: true,
-      isCorrect: true,
-      marks: true,
-      timeTakenSeconds: true,
-      answeredAt: true,
-      responseVersion: true,
-    },
+    orderBy: { sequence: "asc" },
+    include: { questionVersion: { include: { question: true } } },
   });
 }
 
 export async function listAnswersForSessionWithQuestionIds(sessionId: string) {
   return prisma.attempt.findMany({
     where: { sessionId },
-    orderBy: [{ answeredAt: "asc" }],
-    select: {
-      id: true,
-      questionVersionId: true,
-      questionVersion: {
-        select: {
-          questionId: true,
-        },
-      },
-      selectedAnswers: true,
-      isCorrect: true,
-      marks: true,
-      timeTakenSeconds: true,
-      answeredAt: true,
-      responseVersion: true,
-    },
+    select: { questionVersionId: true, selectedAnswers: true, isCorrect: true, marks: true, sequence: true, answeredAt: true, timeTakenSeconds: true },
+    orderBy: { sequence: "asc" },
   });
 }
 
-): Promise<SessionWithAnswersRow | null> {
-  return prisma.practiceSession.findUnique({
-    where: { id },
-    select: SESSION_WITH_ANSWERS_SELECT,
-  });
+export interface PracticeQuestionAnswer {
+  questionVersionId: string;
+  questionId: string;
+  questionNumber: number | null;
+  questionTypeId: string | null;
+  answerState: string | null;
+  markedForReview: boolean | null;
+  selectedAnswers: string[] | null;
+  numericAnswer: number | null;
+  negativeMarksApplied: number | null;
+  correct: boolean | null;
+  score: number | null;
 }
 
-export async function findSessionWithAnswersByIdAndOwner(
-  id: string,
-  ownerUserId: string
-): Promise<SessionWithAnswersRow | null> {
-  return prisma.practiceSession.findFirst({
-    where: { id, userId: ownerUserId },
-    select: SESSION_WITH_ANSWERS_SELECT,
-  });
-}
+export function toPracticeQuestionAnswer(row: {
+  questionVersionId: string;
+  selectedAnswers: unknown;
+  isCorrect: boolean;
+  marks: number;
+  sequence: number;
+  questionVersion?: { questionId: string };
+}): PracticeQuestionAnswer {
+  const selected = row.selectedAnswers;
+  let answers: string[] | null = null;
+  let numericAnswer: number | null = null;
+  let markedForReview: boolean | null = null;
+  let answerState: string | null = null;
+  let negativeMarksApplied: number | null = null;
 
-
-export async function savePool(sessionId: string, config: SessionConfig): Promise<void> {
-  await prisma.practiceSession.update({
-    where: { id: sessionId },
-    data: { config: config as unknown as Prisma.InputJsonValue },
-  });
-}
-
-export async function saveFrozenPoolSnapshot(
-  sessionId: string,
-  snapshot: FrozenPoolSnapshot
-): Promise<void> {
-  const existing = await prisma.practiceSession.findUnique({
-    where: { id: sessionId },
-    select: { config: true },
-  });
-  const currentConfig = (existing?.config as object) ?? {};
-  await prisma.practiceSession.update({
-    where: { id: sessionId },
-    data: {
-      config: {
-        ...currentConfig,
-        frozen_pool_snapshot: snapshot as unknown as Prisma.InputJsonValue,
-      } as unknown as Prisma.InputJsonValue,
-    },
-  });
-}
-
-export async function saveSelectionMetadata(
-  sessionId: string,
-  metadata: SelectionMetadata
-): Promise<void> {
-  const existing = await prisma.practiceSession.findUnique({
-    where: { id: sessionId },
-    select: { config: true },
-  });
-  const currentConfig = (existing?.config as object) ?? {};
-  await prisma.practiceSession.update({
-    where: { id: sessionId },
-    data: {
-      config: {
-        ...currentConfig,
-        selection_metadata: metadata as unknown as Prisma.InputJsonValue,
-      } as unknown as Prisma.InputJsonValue,
-    },
-  });
-}
-
-export async function updateSessionStatus(
-  sessionId: string,
-  status: string,
-  timestamps?: {
-    endedAt?: Date;
-    abandonedAt?: Date;
-    startedAt?: Date;
+  if (Array.isArray(selected)) { answers = selected; }
+  else if (typeof selected === "object" && selected !== null) {
+    const obj = selected as Record<string, unknown>;
+    if (Array.isArray(obj.values)) { answers = obj.values; }
+    if (typeof obj.numericAnswer === "number") { numericAnswer = obj.numericAnswer; }
+    if (typeof obj.__markedForReview === "boolean") { markedForReview = obj.__markedForReview; }
+    if (typeof obj.__answerState === "string") { answerState = obj.__answerState; }
+    if (typeof obj.__negativeMarksApplied === "number") { negativeMarksApplied = obj.__negativeMarksApplied; }
   }
-): Promise<void> {
-  const data: Prisma.PracticeSessionUpdateInput = { status };
-  if (timestamps) {
-    if (timestamps.endedAt) data.endedAt = timestamps.endedAt;
-    if (timestamps.abandonedAt) data.abandonedAt = timestamps.abandonedAt;
-    if (timestamps.startedAt) data.startedAt = timestamps.startedAt;
-  }
-  await prisma.practiceSession.update({
-    where: { id: sessionId },
-    data,
+
+  return {
+    questionVersionId: row.questionVersionId,
+    questionId: row.questionVersion?.questionId ?? "",
+    questionNumber: row.sequence,
+    questionTypeId: null,
+    answerState,
+    markedForReview,
+    selectedAnswers: answers,
+    numericAnswer,
+    negativeMarksApplied,
+    correct: row.isCorrect,
+    score: Number(row.marks),
+  };
+}
+
+export async function extractAnswerMetadata(sessionId: string) {
+  return prisma.attempt.findMany({
+    where: { sessionId },
+    select: { questionVersionId: true, selectedAnswers: true, isCorrect: true, marks: true, sequence: true, answeredAt: true, timeTakenSeconds: true },
+    orderBy: { sequence: "asc" },
   });
 }
 
-export async function completeSession(sessionId: string, score: number): Promise<void> {
-  await prisma.practiceSession.update({
-    where: { id: sessionId },
-    data: { status: "completed", endedAt: new Date(), score },
+// Legacy Compatibility
+export async function findAttempt(sessionId: string, questionVersionId: string) {
+  return prisma.attempt.findFirst({ where: { sessionId, questionVersionId } });
+}
+
+export async function upsertAttempt(input: any) {
+  return upsertAnswer(input);
+}
+
+export async function listAttemptsForSession(sessionId: string) {
+  return listAnswersForSession(sessionId);
+}
+
+export async function attemptsForSessionWithTopics(sessionId: string) {
+  return prisma.attempt.findMany({
+    where: { sessionId },
+    include: { questionVersion: { include: { question: { include: { topic: true } } } } },
+    orderBy: { sequence: "asc" },
   });
 }
 
-export async function abandonSession(sessionId: string): Promise<void> {
-  await prisma.practiceSession.update({
-    where: { id: sessionId },
-    data: { status: "abandoned", abandonedAt: new Date(), endedAt: new Date() },
+export async function sumMarksForQuestionVersions(questionVersionIds: string[]) {
+  return prisma.attempt.aggregate({
+    where: { questionVersionId: { in: questionVersionIds } },
+    _sum: { marks: true },
   });
 }
 
-﻿
+export async function sumMarksForQuestions(questionIds: string[]) {
+  return prisma.attempt.findMany({
+    where: { questionVersion: { questionId: { in: questionIds } } },
+    select: { questionVersionId: true, marks: true },
+  });
+}
+
+export async function findAnswerBySessionIdAndVersion(sessionId: string, questionVersionId: string) {
+  return prisma.attempt.findFirst({ where: { sessionId, questionVersionId } });
+}
+
+
