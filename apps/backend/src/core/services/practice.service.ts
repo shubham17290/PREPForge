@@ -1,378 +1,379 @@
-// PHASE 8 — Practice session lifecycle service (Phase 4 §3.2.5–3.2.8, §7, §8)
-import { config } from "../config/env";
+// PHASE 12G-T10 — Practice Service Layer (thin business logic over 12G-T9 repositories)
 import { errors } from "../errors";
-import { gradeAnswer, QuestionSnapshot } from "../grading/grading.service";
-import { prisma } from "../repositories/prisma";
-import * as questionsRepo from "../repositories/questions.repo";
 import * as practiceRepo from "../repositories/practice.repo";
-import type { SessionConfig, SessionRow } from "../repositories/practice.repo";
-import { findSubjectById, findTopicById } from "../repositories/taxonomy.repo";
-import { writeAuditEntry } from "../repositories/analytics.repo";
+import type {
+  SessionRow,
+  SessionWithAnswersRow,
+  PracticeQuestionAnswerUpsertInput,
+  FrozenPoolSnapshot,
+  SelectionMetadata,
+} from "../repositories/practice.repo";
 
-const MAX_POOL_CANDIDATES = 500;
+// ─── Types ──────────────────────────────────────────────────────────────────────
 
-export interface CreateSessionInput {
-  mode: string;
-  filters: {
-    subject_id?: string;
-    topic_id?: string;
-    year?: number;
-    difficulty?: string;
-    question_types?: string[];
+export interface CreatePracticeSessionInput {
+  userId: string;
+  modeId: string;
+  config: {
+    mode: string;
+    filters: {
+      subject_id?: string;
+      topic_id?: string;
+      year?: number;
+      difficulty?: string;
+      question_types?: string[];
+    };
+    question_count: number;
+    pool: string[] | null;
   };
   timed: boolean;
-  questionCount: number;
+  totalQuestions: number;
+  frozenPoolSnapshot?: FrozenPoolSnapshot;
+  selectionMetadata?: SelectionMetadata;
 }
 
-function shuffle<T>(items: T[]): T[] {
-  const copy = [...items];
-  for (let i = copy.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
+export interface PracticeSessionDTO {
+  id: string;
+  userId: string;
+  modeId: string;
+  status: string;
+  timed: boolean;
+  totalQuestions: number;
+  score: number | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  abandonedAt: string | null;
+  config: unknown;
+  mode: { id: string; code: string; name: string };
 }
 
-async function loadOwnedSession(sessionId: string, userId: string): Promise<SessionRow> {
-  const session = await practiceRepo.findSessionById(sessionId);
-  if (!session) throw errors.notFound("SESSION_NOT_FOUND", "Practice session not found.");
-  if (session.userId !== userId) throw errors.notOwner();
-  return session;
+export interface PracticeAnswerDTO {
+  id: string;
+  sessionId: string;
+  questionId: string;
+  questionVersionId: string;
+  selectedAnswers: unknown;
+  correct: boolean;
+  score: number;
+  negativeMarksApplied: boolean;
+  markedForReview: boolean;
+  answerState: "unanswered" | "answered" | "skipped" | "review";
+  timeTakenSeconds: number;
+  answeredAt: string;
+  responseVersion: number;
 }
 
-/** 24h resume window (Phase 2): in_progress sessions older than the window are abandoned. */
-async function sweepAbandoned(session: SessionRow): Promise<SessionRow> {
-  if (session.status === "in_progress" && Date.now() - session.startedAt.getTime() > config.practice.abandonWindowMs) {
-    await practiceRepo.abandonSession(session.id);
-    return { ...session, status: "abandoned", abandonedAt: new Date(), endedAt: new Date() };
-  }
-  return session;
+export interface PracticeSessionWithAnswersDTO {
+  session: PracticeSessionDTO;
+  answers: PracticeAnswerDTO[];
 }
 
-function assertLive(session: SessionRow): void {
-  if (session.status !== "in_progress") {
-    throw errors.conflict("CONFLICT_SESSION_NOT_LIVE", "This session is no longer in progress.");
-  }
-}
+// ─── Helpers ────────────────────────────────────────────────────────────────────
 
-export async function createSession(userId: string, input: CreateSessionInput) {
-  // Business validation (Phase 4 §6): active subject/topic, matching pool required.
-  const filters = input.filters;
-  const activeKeys = Object.values(filters).filter((value) => value !== undefined).length;
-  if (activeKeys > 2) {
-    throw errors.validation([
-      { field: "filters", code: "VALIDATION_TOO_MANY_FILTERS", message: "At most 2 filter keys may be active." },
-    ]);
-  }
-  if (filters.subject_id) {
-    const subject = await findSubjectById(filters.subject_id);
-    if (!subject) {
-      throw errors.validation([
-        { field: "filters.subject_id", code: "VALIDATION_UNKNOWN_SUBJECT", message: "Subject does not exist or is inactive." },
-      ]);
-    }
-  }
-  if (filters.topic_id) {
-    const topic = await findTopicById(filters.topic_id);
-    if (!topic || !topic.isActive) {
-      throw errors.validation([
-        { field: "filters.topic_id", code: "VALIDATION_UNKNOWN_TOPIC", message: "Topic does not exist or is inactive." },
-      ]);
-    }
-  }
-
-  const questionFilters: questionsRepo.QuestionFilters = {
-    subjectId: filters.subject_id,
-    topicId: filters.topic_id,
-    year: filters.year,
-    difficulty: filters.difficulty,
+function toSessionDTO(row: SessionRow): PracticeSessionDTO {
+  return {
+    id: row.id,
+    userId: row.userId,
+    modeId: row.modeId,
+    status: row.status,
+    timed: row.timed,
+    totalQuestions: row.totalQuestions,
+    score: row.score ? Number(row.score) : null,
+    startedAt: row.startedAt ? row.startedAt.toISOString() : null,
+    endedAt: row.endedAt ? row.endedAt.toISOString() : null,
+    abandonedAt: row.abandonedAt ? row.abandonedAt.toISOString() : null,
+    config: row.config,
+    mode: row.mode,
   };
-  if (filters.question_types && filters.question_types.length === 1) {
-    questionFilters.typeCode = filters.question_types[0];
+}
+
+function toSessionWithAnswersDTO(
+  sessionRow: SessionWithAnswersRow
+): PracticeSessionWithAnswersDTO {
+  const answers: PracticeAnswerDTO[] = (sessionRow.attempts || []).map((attempt) => ({
+    id: attempt.id,
+    sessionId: sessionRow.id,
+    questionId: attempt.questionVersionId,
+    questionVersionId: attempt.questionVersionId,
+    selectedAnswers: attempt.selectedAnswers,
+    correct: attempt.isCorrect,
+    score: Number(attempt.marks),
+    negativeMarksApplied: false,
+    markedForReview: false,
+    answerState: "answered" as const,
+    timeTakenSeconds: attempt.timeTakenSeconds,
+    answeredAt: attempt.answeredAt.toISOString(),
+    responseVersion: attempt.responseVersion,
+  }));
+
+  return {
+    session: toSessionDTO(sessionRow as unknown as SessionRow),
+    answers,
+  };
+}
+
+// ─── Service Operations ─────────────────────────────────────────────────────────
+
+/**
+ * Create a new Practice session.
+ *
+ * Rules:
+ * - Validates basic input
+ * - Preserves selection metadata when supplied
+ * - Persists frozenPoolSnapshot when supplied
+ * - Creates session with initial 'pending' status
+ * - Does NOT select questions or generate pools
+ */
+export async function createPracticeSession(
+  input: CreatePracticeSessionInput
+): Promise<PracticeSessionDTO> {
+  // Basic validation
+  if (!input.userId) {
+    throw errors.malformed("User ID is required.");
+  }
+  if (!input.modeId) {
+    throw errors.malformed("Mode ID is required.");
+  }
+  if (input.totalQuestions <= 0) {
+    throw errors.malformed("Total questions must be positive.");
   }
 
-  const available = await questionsRepo.countPublishedQuestions(questionFilters);
-  if (available < 1) throw errors.noMatchingQuestions();
-
-  const total = Math.min(available, input.questionCount);
-  const mode = await practiceRepo.ensurePracticeMode(input.mode);
-
-  const sessionConfig: SessionConfig = {
-    mode: input.mode,
-    filters: {
-      ...(filters.subject_id ? { subject_id: filters.subject_id } : {}),
-      ...(filters.topic_id ? { topic_id: filters.topic_id } : {}),
-      ...(filters.year !== undefined ? { year: filters.year } : {}),
-      ...(filters.difficulty ? { difficulty: filters.difficulty } : {}),
-      ...(filters.question_types ? { question_types: filters.question_types } : {}),
-    },
-    question_count: input.questionCount,
-    pool: null,
-  };
-
+  // Create session
   const session = await practiceRepo.createSession({
-    userId,
-    modeId: mode.id,
-    config: sessionConfig,
+    userId: input.userId,
+    modeId: input.modeId,
+    config: input.config,
     timed: input.timed,
-    totalQuestions: total,
+    totalQuestions: input.totalQuestions,
   });
 
-  return {
-    id: session.id,
-    mode: input.mode,
-    timed: session.timed,
-    total_questions: session.totalQuestions,
-    status: session.status,
-    started_at: session.startedAt.toISOString(),
-  };
-}
-
-export async function startSession(sessionId: string, userId: string) {
-  let session = await loadOwnedSession(sessionId, userId);
-  session = await sweepAbandoned(session);
-  assertLive(session);
-
-  const parsed = practiceRepo.parseSessionConfig(session.config);
-  if (!parsed.pool || parsed.pool.length === 0) {
-    const poolFilters: questionsRepo.QuestionFilters = {
-      subjectId: parsed.filters.subject_id,
-      topicId: parsed.filters.topic_id,
-      year: parsed.filters.year,
-      difficulty: parsed.filters.difficulty,
-    };
-    // Mirror createSession: honor a single requested question type when building the pool,
-    // otherwise startSession could draw questions of the wrong type into an MSQ/NAT session.
-    if (parsed.filters.question_types && parsed.filters.question_types.length === 1) {
-      poolFilters.typeCode = parsed.filters.question_types[0];
-    }
-    const candidates = await questionsRepo.poolCandidateIds(poolFilters, MAX_POOL_CANDIDATES);
-    parsed.pool = shuffle(candidates).slice(0, session.totalQuestions);
-    await practiceRepo.savePool(session.id, parsed);
+  // Persist frozen pool snapshot if supplied
+  if (input.frozenPoolSnapshot) {
+    await practiceRepo.saveFrozenPoolSnapshot(session.id, input.frozenPoolSnapshot);
   }
 
-  return buildSessionState(session.id);
+
+/**
+ * Get a Practice session by ID for the owning user.
+ *
+ * Rules:
+ * - Uses owner-scoped lookup
+ * - Returns 404 if session doesn't exist or doesn't belong to user
+ * - Does NOT expose answer-key information
+ */
+export async function getPracticeSession(
+  sessionId: string,
+  userId: string
+): Promise<PracticeSessionDTO> {
+  const session = await loadOwnedSession(sessionId, userId);
+  return toSessionDTO(session);
 }
 
-export async function getSessionState(sessionId: string, userId: string) {
-  let session = await loadOwnedSession(sessionId, userId);
-  session = await sweepAbandoned(session);
-  return buildSessionState(session.id);
-}
+/**
+ * Activate a Practice session.
+ *
+ * Allowed transition: pending → active
+ * Rejected transitions: active → active, submitted → active
+ *
+ * Rules:
+ * - Verifies session ownership
+ * - Only allows activation from 'pending' status
+ * - Rejects activation from 'active' or 'submitted' status
+ * - Does NOT implement submission
+ */
+export async function activatePracticeSession(
+  sessionId: string,
+  userId: string
+): Promise<PracticeSessionDTO> {
+  const session = await loadOwnedSession(sessionId, userId);
 
-interface PoolQuestion {
-  id: string;
-  body: string;
-  type_code: string;
-  marks: number;
-  difficulty: string;
-  gate_year: number;
-  options: Array<{ id: string; body: string }>;
-}
-
-/** Restore view: pool + saved attempts; correct answers/explanations never exposed here (FR-EVAL-04). */
-async function buildSessionState(sessionId: string) {
-  const session = await practiceRepo.findSessionById(sessionId);
-  if (!session) throw errors.notFound("SESSION_NOT_FOUND", "Practice session not found.");
-  const parsed = practiceRepo.parseSessionConfig(session.config);
-
-  const poolIds = parsed.pool ?? [];
-  const attempts = await practiceRepo.listAttemptsForSession(session.id);
-  const versionIds = attempts.map((attempt) => attempt.questionVersionId);
-  const versions = versionIds.length
-    ? await prisma.questionVersion.findMany({
-        where: { id: { in: versionIds } },
-        select: { id: true, snapshot: true },
-      })
-    : [];
-  const questionIdByAttempt = new Map<string, string>();
-  for (const version of versions) {
-    const snapshot = version.snapshot as Partial<QuestionSnapshot>;
-    if (snapshot && typeof snapshot.question_id === "string") {
-      questionIdByAttempt.set(version.id, snapshot.question_id);
-    }
+  // Validate status transition
+  if (session.status === "submitted") {
+    throw errors.conflict(
+      "SUBMITTED_SESSION_IMMUTABLE",
+      "Cannot activate a submitted session."
+    );
   }
 
-  const questions: PoolQuestion[] = [];
-  for (const questionId of poolIds) {
-    const question = await prisma.question.findUnique({
-      where: { id: questionId },
-      select: {
-        id: true,
-        body: true,
-        marks: true,
-        difficulty: true,
-        gateYear: true,
-        questionType: { select: { code: true } },
-        options: { orderBy: { sortOrder: "asc" }, select: { id: true, body: true } },
-      },
-    });
-    if (!question) continue;
-    questions.push({
-      id: question.id,
-      body: question.body,
-      type_code: question.questionType.code,
-      marks: Number(question.marks),
-      difficulty: question.difficulty,
-      gate_year: question.gateYear,
-      options: question.options.map((option) => ({ id: option.id, body: option.body })),
-    });
-  }
+  if (session.status === "active") {
+    throw errors.conflict(
+      "INVALID_SESSION_STATE",
+      "Session is already active."
+    );
 
-  return {
-    session_id: session.id,
-    mode: session.mode.code,
-    timed: session.timed,
-    status: session.status,
-    started_at: session.startedAt.toISOString(),
-    total_questions: session.totalQuestions,
-    questions,
-    attempts: attempts.map((attempt) => ({
-      attempt_id: attempt.id,
-      question_id: questionIdByAttempt.get(attempt.questionVersionId) ?? null,
-      is_correct: attempt.isCorrect,
-      marks: Number(attempt.marks),
-      time_taken_seconds: attempt.timeTakenSeconds,
-    })),
-  };
-}
-
-export async function recordAttempt(
+/**
+ * Save or update a Practice answer.
+ *
+ * Rules:
+ * - Verifies session ownership
+ * - Verifies session is 'active'
+ * - Rejects modification of 'submitted' sessions
+ * - Does NOT calculate correctness, score, or negative marks
+ * - Does NOT expose correct answers
+ * - Only persists student's answer state and review flag
+ */
+export async function savePracticeAnswer(
   sessionId: string,
   userId: string,
-  body: { question_id: string; answer: Record<string, unknown>; time_taken_seconds: number },
-) {
-  let session = await loadOwnedSession(sessionId, userId);
-  session = await sweepAbandoned(session);
-  assertLive(session);
+  questionId: string,
+  questionVersionId: string,
+  answerState: "unanswered" | "answered" | "skipped" | "review",
+  markedForReview: boolean,
+  selectedAnswers: unknown,
+  timeTakenSeconds: number
+): Promise<PracticeAnswerDTO> {
+  // Verify session ownership and get session
+  const session = await loadOwnedSession(sessionId, userId);
 
-  const parsed = practiceRepo.parseSessionConfig(session.config);
-  const pool = parsed.pool ?? [];
-  if (!pool.includes(body.question_id)) throw errors.questionNotInSession();
-
-  const version = await questionsRepo.currentVersionForQuestion(body.question_id);
-  if (!version) {
-    throw errors.validation([
-      { field: "question_id", code: "VALIDATION_QUESTION_UNAVAILABLE", message: "Question has no gradable version." },
-    ]);
+  // Validate session status
+  if (session.status === "submitted") {
+    throw errors.conflict(
+      "SUBMITTED_SESSION_IMMUTABLE",
+      "Cannot modify answers in a submitted session."
+    );
   }
-  const snapshot = version.snapshot as unknown as QuestionSnapshot;
 
-  const grade = gradeAnswer(snapshot, body.answer as never);
+  if (session.status !== "active") {
+    throw errors.conflict(
+      "INVALID_SESSION_STATE",
+      `Cannot save answers to a '${session.status}' session. Session must be 'active'.`
+    );
+  }
 
-  const existing = await practiceRepo.findAttempt(session.id, version.id);
-  const saved = await practiceRepo.upsertAttempt({
-    sessionId: session.id,
+  // Prepare answer input for repository
+  const answerInput: PracticeQuestionAnswerUpsertInput = {
+    sessionId,
     userId,
-    questionVersionId: version.id,
-    selectedAnswers: body.answer,
-    isCorrect: grade.isCorrect,
-    marks: grade.marksAwarded,
-    timeTakenSeconds: body.time_taken_seconds,
-  });
+    questionVersionId,
+    questionId,
+    selectedAnswers,
+    correct: false,
+    score: 0,
+    negativeMarksApplied: false,
+    markedForReview,
+    answerState,
+    timeTakenSeconds,
+  };
 
+  // Persist through repository
+  const attempt = await practiceRepo.upsertAnswer(answerInput);
+
+
+// ─── Status Constants ───────────────────────────────────────────────────────────
+
+export const PracticeSessionStatus = {
+  PENDING: "pending",
+  ACTIVE: "active",
+  SUBMITTED: "submitted",
+} as const;
+
+export type PracticeSessionStatus = (typeof PracticeSessionStatus)[keyof typeof PracticeSessionStatus];
+
+  // Convert to DTO
   return {
-    created: existing === null,
-    payload: {
-      attempt_id: saved.id,
-      question_id: body.question_id,
-      is_correct: grade.isCorrect,
-      marks: Number(saved.marks),
-      time_taken_seconds: saved.timeTakenSeconds,
-    },
+    id: attempt.id,
+    sessionId: attempt.sessionId,
+    questionId: attempt.questionVersionId,
+    questionVersionId: attempt.questionVersionId,
+    selectedAnswers: attempt.selectedAnswers,
+    correct: attempt.isCorrect,
+    score: Number(attempt.marks),
+    negativeMarksApplied: false,
+    markedForReview: false,
+    answerState: "answered" as const,
+    timeTakenSeconds: attempt.timeTakenSeconds,
+    answeredAt: attempt.answeredAt.toISOString(),
+    responseVersion: attempt.responseVersion,
   };
 }
 
-export interface ResultPayload {
-  session_id: string;
-  mode: string;
-  timed: boolean;
-  status: string;
-  started_at: string;
-  ended_at: string | null;
-  score: { total_marks: number; max_marks: number; negative_marks: number };
-  summary: { attempted: number; correct: number; incorrect: number; skipped: number };
-  per_topic: Array<{ topic_id: string | null; attempted: number; correct: number }>;
-  mistakes: string[];
-  explanations: Array<{ question_id: string; explanation: string }>;
+/**
+ * Get all answers for a Practice session.
+ *
+ * Rules:
+ * - Verifies session ownership
+ * - Returns persisted student answer state only
+ * - Does NOT calculate score or result
+ * - Does NOT expose correct_answer data
+ */
+export async function getPracticeSessionAnswers(
+  sessionId: string,
+  userId: string
+): Promise<PracticeSessionWithAnswersDTO> {
+  // Verify ownership
+  await loadOwnedSession(sessionId, userId);
+
+  // Get session with answers
+  const sessionWithAnswers = await practiceRepo.findSessionWithAnswersByIdAndOwner(
+    sessionId,
+    userId
+  );
+
+  if (!sessionWithAnswers) {
+    throw errors.notFound("SESSION_NOT_FOUND", "Practice session not found.");
+  }
+
+  return toSessionWithAnswersDTO(sessionWithAnswers);
 }
 
-export async function completeSession(sessionId: string, userId: string): Promise<ResultPayload> {
-  let session = await loadOwnedSession(sessionId, userId);
-  session = await sweepAbandoned(session);
-  assertLive(session);
+  }
 
-  // OD-06: unanswered questions are "skipped" — they simply have no attempt row and score nothing.
-  const rows = await practiceRepo.attemptsForSessionWithTopics(session.id);
-  const score = rows.reduce((total, row) => total + Number(row.marks), 0);
-  await practiceRepo.completeSession(session.id, score);
+  if (session.status !== "pending") {
+    throw errors.conflict(
+      "INVALID_SESSION_STATE",
+      `Cannot activate session from '${session.status}' status. Only 'pending' sessions can be activated.`
+    );
+  }
 
-  await writeAuditEntry({
-    actorId: userId,
-    action: "session.complete",
-    entityType: "practice_sessions",
-    entityId: session.id,
-    after: { status: "completed", score },
+  // Activate the session
+  await practiceRepo.updateSessionStatus(sessionId, "active", {
+    startedAt: new Date(),
   });
 
-  const refreshed = await practiceRepo.findSessionById(session.id);
-  return buildResult(refreshed ?? session, rows);
+  const refreshedSession = await practiceRepo.findSessionById(sessionId);
+  if (!refreshedSession) {
+    throw errors.notFound("SESSION_NOT_FOUND", "Failed to retrieve activated session.");
+  }
+
+  return toSessionDTO(refreshedSession);
 }
 
-export async function getResult(sessionId: string, userId: string): Promise<ResultPayload> {
-  let session = await loadOwnedSession(sessionId, userId);
-  session = await sweepAbandoned(session);
-  if (session.status !== "completed") {
-    throw errors.conflict("CONFLICT_RESULT_NOT_READY", "Result is only available after the session is completed.");
+  // Persist selection metadata if supplied
+  if (input.selectionMetadata) {
+    await practiceRepo.saveSelectionMetadata(session.id, input.selectionMetadata);
   }
-  const rows = await practiceRepo.attemptsForSessionWithTopics(session.id);
-  return buildResult(session, rows);
+
+  // Update status to pending
+  await practiceRepo.updateSessionStatus(session.id, "pending");
+
+  const refreshedSession = await practiceRepo.findSessionById(session.id);
+  if (!refreshedSession) {
+    throw errors.notFound("SESSION_NOT_FOUND", "Failed to retrieve created session.");
+  }
+
+  return toSessionDTO(refreshedSession);
 }
 
-async function buildResult(session: SessionRow, rows: Awaited<ReturnType<typeof practiceRepo.attemptsForSessionWithTopics>>): Promise<ResultPayload> {
-
-  const correct = rows.filter((row) => row.isCorrect).length;
-  const negative = rows.reduce((total, row) => total + (Number(row.marks) < 0 ? Math.abs(Number(row.marks)) : 0), 0);
-  const versionIds = rows.map((row) => row.questionVersionId);
-  const maxMarks = await practiceRepo.sumMarksForQuestionVersions(versionIds);
-
-  const perTopic = new Map<string | null, { attempted: number; correct: number }>();
-  const mistakes: string[] = [];
-  const explanations: Array<{ question_id: string; explanation: string }> = [];
-  for (const row of rows) {
-    const topicKey = row.questionVersion.question.topicId;
-    const entry = perTopic.get(topicKey) ?? { attempted: 0, correct: 0 };
-    entry.attempted += 1;
-    if (row.isCorrect) entry.correct += 1;
-    perTopic.set(topicKey, entry);
-
-    const questionId = row.questionVersion.question.id;
-    if (!row.isCorrect) mistakes.push(questionId);
-    if (row.questionVersion.question.explanation) {
-      explanations.push({ question_id: questionId, explanation: row.questionVersion.question.explanation });
-    }
-  }
+    markedForReview: false,
+    answerState: "answered" as const,
+    timeTakenSeconds: attempt.timeTakenSeconds,
+    answeredAt: attempt.answeredAt.toISOString(),
+    responseVersion: attempt.responseVersion,
+  }));
 
   return {
-    session_id: session.id,
-    mode: session.mode.code,
-    timed: session.timed,
-    status: session.status,
-    started_at: session.startedAt.toISOString(),
-    ended_at: session.endedAt ? session.endedAt.toISOString() : null,
-    score: {
-      total_marks: Number(session.score ?? 0),
-      max_marks: Math.round(maxMarks * 100) / 100,
-      negative_marks: Math.round(negative * 100) / 100,
-    },
-    summary: {
-      attempted: rows.length,
-      correct,
-      incorrect: rows.length - correct,
-      skipped: Math.max(0, session.totalQuestions - rows.length),
-    },
-    per_topic: [...perTopic.entries()].map(([topic_id, stats]) => ({ topic_id, ...stats })),
-    mistakes,
-    explanations,
+    session: toSessionDTO(sessionRow as unknown as SessionRow),
+    answers,
   };
+}
+
+async function loadOwnedSession(
+  sessionId: string,
+  userId: string
+): Promise<SessionRow> {
+  const session = await practiceRepo.findSessionByIdAndOwner(sessionId, userId);
+  if (!session) {
+    throw errors.notFound("SESSION_NOT_FOUND", "Practice session not found.");
+  }
+  return session;
 }
