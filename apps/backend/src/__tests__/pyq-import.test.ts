@@ -14,6 +14,9 @@ import {
   buildPyqSourceName,
   importPyqStagingArtifact,
   planPyqImport,
+  verifyPyqImport,
+  withDbRetry,
+  type PyqImportResult,
 } from "../ingestion/pyq-importer.js";
 import { createQuestionWithSource } from "../core/repositories/questions.repo.js";
 import { validateQuestionInput } from "../core/services/content.service.js";
@@ -345,6 +348,191 @@ describe("PYQ importer — identity, null-preservation, and atomicity", () => {
       select: { id: true },
     });
     expect(orphans).toHaveLength(0);
+  });
+});
+
+// ─── Phase 12F.2-T3: reliability hardening (retry / verification / audit) ─────
+
+/** Fabricated-result builder for pure verification tests (no writes). */
+function makeResult(overrides: Partial<PyqImportResult> = {}): PyqImportResult {
+  return {
+    artifactFile: null,
+    examYear: EXAM_YEAR,
+    paperNumber: null,
+    shift: null,
+    numbering: { staged: [], missing: [], duplicates: [] },
+    totalStaged: 0,
+    importable: 0,
+    imported: 0,
+    alreadyExisting: 0,
+    skipped: 0,
+    failed: 0,
+    importedQuestions: [],
+    existingQuestions: [],
+    skippedQuestions: [],
+    failedQuestions: [],
+    verification: null,
+    ...overrides,
+  };
+}
+
+describe("PYQ importer — reliability hardening (Phase 12F.2-T3)", () => {
+  it("A. retries a transient DB failure and succeeds", async () => {
+    let calls = 0;
+    const value = await withDbRetry(
+      async () => {
+        calls += 1;
+        if (calls < 3) throw new Error("Can't reach database server at localhost:5432");
+        return "ok";
+      },
+      { backoffMs: 1 },
+    );
+    expect(value).toBe("ok");
+    expect(calls).toBe(3);
+  });
+
+  it("B. stops after the configured maximum attempts and preserves the original error", async () => {
+    let calls = 0;
+    const original = new Error("Server has closed the connection");
+    await expect(
+      withDbRetry(
+        async () => {
+          calls += 1;
+          throw original;
+        },
+        { maxAttempts: 4, backoffMs: 1 },
+      ),
+    ).rejects.toBe(original);
+    expect(calls).toBe(4);
+  });
+
+  it("C. does NOT retry non-transient validation errors", async () => {
+    let calls = 0;
+    await expect(
+      withDbRetry(
+        async () => {
+          calls += 1;
+          throw new Error("VALIDATION_MCQ_ONE_CORRECT: keyless MCQ rejected outside the PYQ policy");
+        },
+        { maxAttempts: 4, backoffMs: 1 },
+      ),
+    ).rejects.toThrow("VALIDATION_MCQ_ONE_CORRECT");
+    expect(calls).toBe(1);
+  });
+
+  it("D. a successful import reports verification.success = true", async () => {
+    const result = await importPyqStagingArtifact({
+      artifact: makeArtifact([
+        { question_number: 81, type: "mcq", options: keylessOptions(["A", "B"]) },
+        { question_number: 82, type: "nat", options: [] },
+      ]),
+      ...importerConfig(),
+    });
+    expect(result.imported).toBe(2);
+    expect(result.failed).toBe(0);
+    expect(result.verification.success).toBe(true);
+    expect(result.verification.issues).toHaveLength(0);
+    expect(result.verification.checkedImported).toBe(2);
+    expect(result.verification.countInvariant).toEqual({
+      expectedImportable: 2,
+      importedPlusExisting: 2,
+      ok: true,
+    });
+  });
+
+  it("E. verification detects missing and incorrect persisted data", async () => {
+    // (1) fabricated result pointing at rows that do not exist:
+    const missingCheck = await verifyPyqImport(
+      makeResult({
+        imported: 1,
+        importedQuestions: [
+          {
+            questionNumber: 83,
+            sourceName: buildPyqSourceName(EXAM_YEAR, 83),
+            sourceId: "00000000-0000-4000-8000-000000000dea",
+            questionId: "00000000-0000-4000-8000-000000000dbe",
+            type: "mcq",
+            expectedOptionCount: 4,
+            expectedNumericAnswerCount: 0,
+          },
+        ],
+      }),
+      { expectedImportableCount: 1 },
+    );
+    expect(missingCheck.success).toBe(false);
+    expect(missingCheck.issues.some((issue) => issue.check === "source_missing")).toBe(true);
+
+    // (2) real persisted question, wrong expectation (2 staged options vs 4 claimed):
+    const loaded81 = await loadImported(81);
+    if (!loaded81.source || !loaded81.question) throw new Error("Q81 was not imported by the previous test");
+    const mismatch = await verifyPyqImport(
+      makeResult({
+        imported: 1,
+        importedQuestions: [
+          {
+            questionNumber: 81,
+            sourceName: buildPyqSourceName(EXAM_YEAR, 81),
+            sourceId: loaded81.source.id,
+            questionId: loaded81.question.id,
+            type: "mcq",
+            expectedOptionCount: 4,
+            expectedNumericAnswerCount: 0,
+          },
+        ],
+      }),
+      { expectedImportableCount: 1 },
+    );
+    expect(mismatch.success).toBe(false);
+    expect(mismatch.issues.some((issue) => issue.check === "option_count_mismatch")).toBe(true);
+
+    // (3) paper-level count invariant violation:
+    const badCount = await verifyPyqImport(makeResult({ imported: 1, alreadyExisting: 1 }), {
+      expectedImportableCount: 3,
+    });
+    expect(badCount.countInvariant.ok).toBe(false);
+    expect(badCount.issues.some((issue) => issue.check === "count_invariant")).toBe(true);
+  });
+
+  it("F. each imported question produces one PYQ audit entry with full identity", async () => {
+    const loaded81 = await loadImported(81);
+    if (!loaded81.question) throw new Error("Q81 was not imported by the previous test");
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: "question.pyq_import", entityType: "questions", entityId: loaded81.question.id },
+    });
+    expect(audit).not.toBeNull();
+    expect(audit?.actorId).toBe(TEST_USER_ID);
+    const after = audit?.after as Record<string, unknown>;
+    expect(after.import).toBe("PYQ");
+    expect(after.examYear).toBe(EXAM_YEAR);
+    expect(after.questionNumber).toBe(81);
+    expect(after.sourceName).toBe(buildPyqSourceName(EXAM_YEAR, 81));
+    expect(after.questionSourceId).toBe(loaded81.source?.id);
+  });
+
+  it("G. idempotent rerun creates no duplicate rows and no duplicate audit entries", async () => {
+    const artifact = makeArtifact([
+      { question_number: 81, type: "mcq", options: keylessOptions(["A", "B"]) },
+      { question_number: 82, type: "nat", options: [] },
+    ]);
+    const second = await importPyqStagingArtifact({ artifact, ...importerConfig() });
+    expect(second.imported).toBe(0);
+    expect(second.alreadyExisting).toBe(2);
+    expect(second.failed).toBe(0);
+    expect(second.verification.success).toBe(true);
+    expect(second.verification.countInvariant).toEqual({
+      expectedImportable: 2,
+      importedPlusExisting: 2,
+      ok: true,
+    });
+    expect(await prisma.questionSource.count({ where: { name: buildPyqSourceName(EXAM_YEAR, 81) } })).toBe(1);
+    const source81 = await prisma.questionSource.findFirst({ where: { name: buildPyqSourceName(EXAM_YEAR, 81) } });
+    if (!source81) throw new Error("Q81 source disappeared");
+    expect(await prisma.question.count({ where: { sourceId: source81.id } })).toBe(1);
+    const loaded81 = await loadImported(81);
+    if (!loaded81.question) throw new Error("Q81 was not imported");
+    expect(
+      await prisma.auditLog.count({ where: { action: "question.pyq_import", entityType: "questions", entityId: loaded81.question.id } }),
+    ).toBe(1);
   });
 });
 

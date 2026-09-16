@@ -301,8 +301,81 @@ export async function createQuestionWithSource(
       },
       select: { id: true },
     });
+    // Phase 12F.2-T3 — PYQ import audit trail, written in the SAME transaction so
+    // a successful question can never exist without its import-audit entry.
+    await tx.auditLog.create({
+      data: {
+        actorId: createdById,
+        action: "question.pyq_import",
+        entityType: "questions",
+        entityId: question.id,
+        after: {
+          import: "PYQ",
+          examYear: source.examYear,
+          questionNumber: source.questionNumber,
+          sourceName: source.name,
+          questionSourceId: created.id,
+        },
+      },
+    });
     return { sourceId: created.id, questionId: question.id };
   });
+}
+
+// Phase 12F.2-T3 — PYQ audit trail + post-import verification helpers (additive
+// only; used exclusively by the ingestion importer).
+
+/** Write one PYQ import-audit row (adopt path, outside the create transaction). */
+export async function recordPyqImportAudit(input: {
+  createdById: string;
+  questionId: string;
+  questionSourceId: string;
+  sourceName: string;
+  examYear: number;
+  questionNumber: number;
+}): Promise<void> {
+  await prisma.auditLog.create({
+    data: {
+      actorId: input.createdById,
+      action: "question.pyq_import",
+      entityType: "questions",
+      entityId: input.questionId,
+      after: {
+        import: "PYQ",
+        examYear: input.examYear,
+        questionNumber: input.questionNumber,
+        sourceName: input.sourceName,
+        questionSourceId: input.questionSourceId,
+      },
+    },
+  });
+}
+
+/**
+ * Read-only snapshot used by verifyPyqImport: the QuestionSource plus the linked
+ * Question with option/numeric-answer counts, or nulls when a row is missing.
+ */
+export async function getQuestionWithSourceSnapshot(sourceId: string): Promise<{
+  source: { id: string; name: string; examYear: number; paperNumber: string | null; shift: string | null; questionNumber: number | null } | null;
+  question: { id: string; gateYear: number; status: string; version: number; sourceId: string | null; _count: { options: number; numericAnswers: number } } | null;
+}> {
+  const source = await prisma.questionSource.findUnique({
+    where: { id: sourceId },
+    select: { id: true, name: true, examYear: true, paperNumber: true, shift: true, questionNumber: true },
+  });
+  if (!source) return { source: null, question: null };
+  const question = await prisma.question.findFirst({
+    where: { sourceId },
+    select: {
+      id: true,
+      gateYear: true,
+      status: true,
+      version: true,
+      sourceId: true,
+      _count: { select: { options: true, numericAnswers: true } },
+    },
+  });
+  return { source, question };
 }
 
 export async function findQuestionBySourceIdentity(

@@ -33,9 +33,65 @@ import {
   findQuestionBySourceId,
   findQuestionBySourceIdentity,
   findQuestionSourceByName,
+  getQuestionWithSourceSnapshot,
+  recordPyqImportAudit,
   type OptionWrite,
   type QuestionWriteInput,
 } from '../core/repositories/questions.repo.js';
+
+// ─── Bounded database retry (Phase 12F.2-T3) ─────────────────────────────────
+
+/**
+ * Transient connection failures worth retrying (Neon auto-suspend / pooled
+ * endpoint cold starts). Matched case-insensitively against the error message;
+ * anything else — validation, business-rule (P2002 unique), configuration — is
+ * surfaced immediately and never retried.
+ */
+const TRANSIENT_DB_ERROR_PATTERNS = [
+  "can't reach database server",
+  "timed out",
+  "timeout",
+  "closed the connection",
+  "connection terminated",
+  "connection refused",
+] as const;
+
+export function isTransientDbError(error: unknown): boolean {
+  const message = String(error instanceof Error ? error.message : error).toLowerCase();
+  return TRANSIENT_DB_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
+}
+
+export interface PyqRetryOptions {
+  /** Maximum executions of the operation (default 4 — 1 try + 3 retries). */
+  maxAttempts?: number;
+  /** Base backoff in ms; attempt N waits backoffMs * 2^(N-1) (default 250). */
+  backoffMs?: number;
+  /** Optional observation hook (used by tests; never throws). */
+  onRetry?: (attempt: number, error: unknown) => void;
+}
+
+/**
+ * Run one database operation under a bounded retry: transient connection
+ * failures are retried with exponential backoff up to maxAttempts; every other
+ * error — and the original error once attempts are exhausted — is rethrown
+ * untouched. Never used to wrap a whole paper: callers apply it per operation.
+ */
+export async function withDbRetry<T>(operation: () => Promise<T>, options: PyqRetryOptions = {}): Promise<T> {
+  const maxAttempts = Math.max(1, options.maxAttempts ?? 4);
+  const backoffMs = options.backoffMs ?? 250;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (attempt >= maxAttempts || !isTransientDbError(error)) throw error;
+      options.onRetry?.(attempt, error);
+      await new Promise((resolve) => setTimeout(resolve, backoffMs * 2 ** (attempt - 1)));
+    }
+  }
+  throw lastError;
+}
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -89,6 +145,12 @@ export interface PyqImportedQuestion {
   sourceName: string;
   sourceId: string;
   questionId: string;
+  /** Staged question type — drives post-import verification expectations. */
+  type: PyqType;
+  /** Staged option count for MCQ/MSQ (0 for NAT). */
+  expectedOptionCount: number;
+  /** Staged numeric-answer count for NAT (always 0 for MCQ/MSQ). */
+  expectedNumericAnswerCount: number;
 }
 
 export interface PyqExistingQuestion {
@@ -124,12 +186,18 @@ export interface PyqImportResult {
   existingQuestions: PyqExistingQuestion[];
   skippedQuestions: PyqImportSkip[];
   failedQuestions: PyqImportSkip[];
+  /** Attached by verifyPyqImport after the import loop (12F.2-T3); null only in fabricated/partial results. */
+  verification: PyqVerificationBlock | null;
 }
 
 interface PlannedQuestion {
   questionNumber: number;
   type: PyqType;
   sourceName: string;
+  /** Staged option count for MCQ/MSQ; 0 for NAT. */
+  expectedOptionCount: number;
+  /** Staged numeric-answer count for NAT; 0 for MCQ/MSQ. */
+  expectedNumericAnswerCount: number;
   write: QuestionWriteInput;
 }
 
@@ -366,6 +434,8 @@ export async function planPyqImport(artifact: StagingOutput, context: PyqPlanCon
         questionNumber,
         type: type as PyqType,
         sourceName: buildPyqSourceName(examYear, questionNumber),
+        expectedOptionCount: options.length,
+        expectedNumericAnswerCount: numericAnswers.length,
         // The staged value stays authoritative for null-preservation.
         write: { ...write, negativeMarks },
       });
@@ -375,6 +445,129 @@ export async function planPyqImport(artifact: StagingOutput, context: PyqPlanCon
   }
 
   return { numbering, importable, skipped };
+}
+
+// ── Post-import verification (Phase 12F.2-T3) ───────────────────────────────
+
+export interface PyqVerificationIssue {
+  questionNumber: number | null;
+  /** Machine-readable check name, e.g. "source_missing", "count_invariant". */
+  check: string;
+  detail: string;
+}
+
+export interface PyqVerificationBlock {
+  success: boolean;
+  checkedImported: number;
+  issues: PyqVerificationIssue[];
+  countInvariant: {
+    expectedImportable: number;
+    importedPlusExisting: number;
+    ok: boolean;
+  };
+}
+
+/**
+ * Read-only post-import verification, run after the import loop. For every newly
+ * imported question it re-reads the persisted rows and confirms the QuestionSource
+ * exists, the Question exists and is linked, questionNumber and gateYear/examYear
+ * agree, and option/numeric-answer counts match the staged expectations. It also
+ * enforces the paper-level invariant `imported + alreadyExisting === planned
+ * importable count`. Verification NEVER deletes or rolls back completed
+ * per-question transactions — a failed verification is reported, not undone.
+ */
+export async function verifyPyqImport(
+  result: PyqImportResult,
+  options: { expectedImportableCount: number },
+): Promise<PyqVerificationBlock> {
+  const issues: PyqVerificationIssue[] = [];
+
+  for (const imported of result.importedQuestions) {
+    const snapshot = await withDbRetry(() => getQuestionWithSourceSnapshot(imported.sourceId));
+    if (!snapshot.source) {
+      issues.push({
+        questionNumber: imported.questionNumber,
+        check: "source_missing",
+        detail: `QuestionSource ${imported.sourceId} (${imported.sourceName}) was not found after import.`,
+      });
+      continue;
+    }
+    if (!snapshot.question) {
+      issues.push({
+        questionNumber: imported.questionNumber,
+        check: "question_missing",
+        detail: `No Question is linked to QuestionSource ${imported.sourceId} (${imported.sourceName}).`,
+      });
+      continue;
+    }
+    if (snapshot.question.sourceId !== imported.sourceId) {
+      issues.push({
+        questionNumber: imported.questionNumber,
+        check: "source_question_relationship",
+        detail: `Question ${snapshot.question.id} does not reference QuestionSource ${imported.sourceId}.`,
+      });
+    }
+    if (snapshot.source.questionNumber !== imported.questionNumber) {
+      issues.push({
+        questionNumber: imported.questionNumber,
+        check: "question_number_mismatch",
+        detail: `Source carries questionNumber ${snapshot.source.questionNumber}, expected ${imported.questionNumber}.`,
+      });
+    }
+    if (snapshot.question.gateYear !== snapshot.source.examYear) {
+      issues.push({
+        questionNumber: imported.questionNumber,
+        check: "gate_year_mismatch",
+        detail: `Question gateYear ${snapshot.question.gateYear} does not match source examYear ${snapshot.source.examYear}.`,
+      });
+    }
+    if (imported.type === "mcq" || imported.type === "msq") {
+      if (snapshot.question._count.options !== imported.expectedOptionCount) {
+        issues.push({
+          questionNumber: imported.questionNumber,
+          check: "option_count_mismatch",
+          detail: `Expected ${imported.expectedOptionCount} staged options, found ${snapshot.question._count.options} persisted.`,
+        });
+      }
+    }
+    if (imported.type === "nat") {
+      if (snapshot.question._count.options !== 0) {
+        issues.push({
+          questionNumber: imported.questionNumber,
+          check: "nat_option_count_mismatch",
+          detail: `NAT questions must have zero options, found ${snapshot.question._count.options}.`,
+        });
+      }
+      if (snapshot.question._count.numericAnswers !== imported.expectedNumericAnswerCount) {
+        issues.push({
+          questionNumber: imported.questionNumber,
+          check: "numeric_answer_count_mismatch",
+          detail: `Expected ${imported.expectedNumericAnswerCount} numeric answers, found ${snapshot.question._count.numericAnswers} persisted.`,
+        });
+      }
+    }
+  }
+
+  const importedPlusExisting = result.imported + result.alreadyExisting;
+  const countOk = importedPlusExisting === options.expectedImportableCount;
+  if (!countOk) {
+    issues.push({
+      questionNumber: null,
+      check: "count_invariant",
+      detail: `imported (${result.imported}) + alreadyExisting (${result.alreadyExisting}) must equal the planned importable count (${options.expectedImportableCount}).`,
+    });
+  }
+
+  return {
+    success: issues.length === 0,
+    checkedImported: result.importedQuestions.length,
+    issues,
+    countInvariant: {
+      expectedImportable: options.expectedImportableCount,
+      importedPlusExisting,
+      ok: countOk,
+    },
+  };
 }
 // ── Configuration resolution (read-only; never creates reference data) ─────
 
@@ -524,7 +717,9 @@ export async function importPyqStagingArtifact(options: PyqImportOptions): Promi
     ),
   );
 
-  const context = await resolvePyqImportContext(options, stagedTypes);
+  // Pre-flight context resolution is read-only but hits the database; a Neon
+  // cold start here must not masquerade as a configuration error (12F.2-T3).
+  const context = await withDbRetry(() => resolvePyqImportContext(options, stagedTypes));
   const plan = await planPyqImport(artifact, { subjectId: context.subjectId, difficulty: context.difficulty });
 
   const result: PyqImportResult = {
@@ -543,22 +738,31 @@ export async function importPyqStagingArtifact(options: PyqImportOptions): Promi
     existingQuestions: [],
     skippedQuestions: plan.skipped.map((skip) => ({ ...skip })),
     failedQuestions: [],
+    verification: {
+      success: false,
+      checkedImported: 0,
+      issues: [],
+      countInvariant: { expectedImportable: plan.importable.length, importedPlusExisting: 0, ok: false },
+    },
   };
 
   for (const planned of plan.importable) {
     try {
       // Idempotency anchors: deterministic name (DB-enforced unique) first, then
       // the source identity tuple (necessary because NULL paper/shift means the
-      // composite unique index cannot dedupe these papers).
-      const existingSource = await findQuestionSourceByName(planned.sourceName);
+      // composite unique index cannot dedupe these papers). Lookups are retried
+      // on transient connection failures only (12F.2-T3).
+      const existingSource = await withDbRetry(() => findQuestionSourceByName(planned.sourceName));
       const identityQuestion =
         existingSource === null
-          ? await findQuestionBySourceIdentity(examYear, paperNumber, shift, planned.questionNumber)
+          ? await withDbRetry(() =>
+              findQuestionBySourceIdentity(examYear, paperNumber, shift, planned.questionNumber),
+            )
           : null;
       const sourceId = existingSource?.id ?? identityQuestion?.sourceId ?? null;
 
       if (sourceId !== null) {
-        const linked = await findQuestionBySourceId(sourceId);
+        const linked = await withDbRetry(() => findQuestionBySourceId(sourceId));
         if (linked) {
           result.alreadyExisting += 1;
           result.existingQuestions.push({
@@ -571,10 +775,25 @@ export async function importPyqStagingArtifact(options: PyqImportOptions): Promi
         }
         // Partial prior run: the source exists but carries no question. Adopt that
         // row instead of creating a second QuestionSource (12F.2-Q §F.3).
-        const adopted = await createQuestion(
-          { ...planned.write, sourceId, questionNumber: planned.questionNumber },
-          context.typeIds[planned.type],
-          context.createdById,
+        const adopted = await withDbRetry(() =>
+          createQuestion(
+            { ...planned.write, sourceId, questionNumber: planned.questionNumber },
+            context.typeIds[planned.type],
+            context.createdById,
+          ),
+        );
+        // The adopt path builds the question outside createQuestionWithSource's
+        // transaction, so its import-audit row is written separately (still
+        // attributed to the configured importer actor).
+        await withDbRetry(() =>
+          recordPyqImportAudit({
+            createdById: context.createdById,
+            questionId: adopted.id,
+            questionSourceId: sourceId,
+            sourceName: existingSource?.name ?? planned.sourceName,
+            examYear,
+            questionNumber: planned.questionNumber,
+          }),
         );
         result.imported += 1;
         result.importedQuestions.push({
@@ -582,15 +801,20 @@ export async function importPyqStagingArtifact(options: PyqImportOptions): Promi
           sourceName: existingSource?.name ?? planned.sourceName,
           sourceId,
           questionId: adopted.id,
+          type: planned.type,
+          expectedOptionCount: planned.expectedOptionCount,
+          expectedNumericAnswerCount: planned.expectedNumericAnswerCount,
         });
         continue;
       }
 
-      const created = await createQuestionWithSource(
-        { name: planned.sourceName, examYear, paperNumber, shift, questionNumber: planned.questionNumber },
-        planned.write,
-        context.typeIds[planned.type],
-        context.createdById,
+      const created = await withDbRetry(() =>
+        createQuestionWithSource(
+          { name: planned.sourceName, examYear, paperNumber, shift, questionNumber: planned.questionNumber },
+          planned.write,
+          context.typeIds[planned.type],
+          context.createdById,
+        ),
       );
       result.imported += 1;
       result.importedQuestions.push({
@@ -598,6 +822,9 @@ export async function importPyqStagingArtifact(options: PyqImportOptions): Promi
         sourceName: planned.sourceName,
         sourceId: created.sourceId,
         questionId: created.questionId,
+        type: planned.type,
+        expectedOptionCount: planned.expectedOptionCount,
+        expectedNumericAnswerCount: planned.expectedNumericAnswerCount,
       });
     } catch (error) {
       // A per-question failure never aborts the paper: the whole unit is skipped
@@ -610,6 +837,12 @@ export async function importPyqStagingArtifact(options: PyqImportOptions): Promi
       });
     }
   }
+
+  // Post-import verification (12F.2-T3): read-only re-check of every newly
+  // imported question plus the paper-level count invariant. A failed
+  // verification is reported on the result — completed per-question
+  // transactions are never rolled back here.
+  result.verification = await verifyPyqImport(result, { expectedImportableCount: plan.importable.length });
 
   return result;
 }
