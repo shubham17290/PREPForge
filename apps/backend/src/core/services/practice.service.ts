@@ -9,7 +9,8 @@ import {
   SessionConfig,
   upsertAnswer,
 } from "../repositories/practice.repo";
-import { prisma } from "../repositories/prisma";
+import type { PracticeSession, Prisma } from "@prisma/client";
+import { updateSessionStatus } from "../repositories/practice.repo";
 
 
 
@@ -25,20 +26,20 @@ export interface CreateSessionInput {
   config?: SessionConfig;
   timed?: boolean;
   totalQuestions: number;
-  frozenPoolSnapshot?: unknown;
-  selectionMetadata?: unknown;
+  frozenPoolSnapshot?: Prisma.InputJsonValue;
+  selectionMetadata?: Prisma.InputJsonValue;
 }
 
 export interface SaveAnswerInput {
   sessionId: string;
   userId: string;
   questionId: string;
+  publishedVersionId: string;
   questionNumber?: number;
   answerState?: string;
   markedForReview?: boolean;
   selectedAnswers?: string[] | null;
   numericAnswer?: number | null;
-  negativeMarksApplied?: number;
 }
 
 export interface SessionDTO {
@@ -49,16 +50,13 @@ export interface SessionDTO {
   totalQuestions: number;
   timed: boolean;
   config: SessionConfig;
-  createdAt: Date;
-  updatedAt: Date;
-  startedAt: Date | null;
+  startedAt: Date;
   completedAt: Date | null;
-  frozenPoolSnapshot?: unknown;
-  selectionMetadata?: unknown;
-  attempts?: any[];
+  frozenPoolSnapshot?: Prisma.InputJsonValue;
+  selectionMetadata?: Prisma.InputJsonValue;
 }
 
-async function toSessionDTO(session: any): Promise<SessionDTO> {
+async function toSessionDTO(session: PracticeSession): Promise<SessionDTO> {
   let parsedConfig: SessionConfig = {
     mode: "default",
     filters: {},
@@ -70,7 +68,7 @@ async function toSessionDTO(session: any): Promise<SessionDTO> {
     try {
       parsedConfig = await parseSessionConfig(session.config);
     } catch {
-      parsedConfig = session.config;
+      // Keep the legacy fallback for malformed config without exposing raw JSON.
     }
   }
 
@@ -82,13 +80,10 @@ async function toSessionDTO(session: any): Promise<SessionDTO> {
     totalQuestions: session.totalQuestions,
     timed: session.timed,
     config: parsedConfig,
-    createdAt: session.createdAt,
-    updatedAt: session.updatedAt,
     startedAt: session.startedAt,
-    completedAt: session.completedAt,
-    frozenPoolSnapshot: (parsedConfig as any).frozenPoolSnapshot,
-    selectionMetadata: (parsedConfig as any).selectionMetadata,
-    attempts: session.answers,
+    completedAt: session.endedAt,
+    frozenPoolSnapshot: parsedConfig.frozenPoolSnapshot,
+    selectionMetadata: parsedConfig.selectionMetadata,
   };
 }
 
@@ -110,19 +105,15 @@ export async function createPracticeSession(input: CreateSessionInput): Promise<
     pool: null,
   };
 
-  if (input.frozenPoolSnapshot) {
-    (config as any).frozenPoolSnapshot = input.frozenPoolSnapshot;
-  }
-  if (input.selectionMetadata) {
-    (config as any).selectionMetadata = input.selectionMetadata;
-  }
-
   const session = await createSession({
     userId: input.userId,
     modeId: input.modeId,
-    config: config as SessionConfig,
+    config,
     timed: input.timed ?? false,
     totalQuestions: input.totalQuestions,
+    status: STATUS.PENDING,
+    frozenPoolSnapshot: input.frozenPoolSnapshot,
+    selectionMetadata: input.selectionMetadata,
   });
   return await toSessionDTO(session);
 }
@@ -143,13 +134,7 @@ export async function activatePracticeSession(sessionId: string, userId: string)
 
   const currentStatus = session.status;
   if (currentStatus === STATUS.PENDING) {
-    const updated = await prisma.practiceSession.update({
-      where: { id: sessionId },
-      data: {
-        status: STATUS.ACTIVE,
-        startedAt: session.startedAt ?? new Date(),
-      },
-    });
+    const updated = await updateSessionStatus(sessionId, STATUS.ACTIVE, userId);
     return await toSessionDTO(updated);
   }
 
@@ -182,25 +167,36 @@ export async function savePracticeAnswer(input: SaveAnswerInput): Promise<void> 
     sessionId: input.sessionId,
     userId: input.userId,
     questionId: input.questionId,
-    questionVersionId: input.questionId,
+    questionVersionId: input.publishedVersionId,
     sequence: input.questionNumber ?? 0,
     questionNumber: input.questionNumber,
     answerState: input.answerState ?? (input.selectedAnswers && input.selectedAnswers.length > 0 ? "answered" : "unanswered"),
     markedForReview: input.markedForReview ?? false,
     selectedAnswers: input.selectedAnswers ?? undefined,
     numericAnswer: input.numericAnswer,
-    negativeMarksApplied: input.negativeMarksApplied ?? 0,
   };
 
   await upsertAnswer(upsertInput);
 }
 
-export async function getPracticeSessionAnswers(sessionId: string, userId: string): Promise<any[]> {
+export async function getPracticeSessionAnswers(sessionId: string, userId: string) {
   const session = await findSessionByIdAndOwner(sessionId, userId);
   if (!session) {
     throw errors.notFound("SESSION_NOT_FOUND", `Session ${sessionId} not found or not owned`);
   }
-  return listAnswersForSession(sessionId);
+  const answers = await listAnswersForSession(sessionId);
+  return answers.map((row) => {
+    const raw = row.selectedAnswers;
+    const state = raw !== null && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    return {
+      questionVersionId: row.questionVersionId,
+      questionNumber: row.sequence,
+      selectedAnswers: Array.isArray(raw) ? raw : state.values,
+      numericAnswer: state.numericAnswer,
+      answerState: state.__answerState,
+      markedForReview: state.__markedForReview,
+    };
+  });
 }
 
 // Compatibility aliases for routes
