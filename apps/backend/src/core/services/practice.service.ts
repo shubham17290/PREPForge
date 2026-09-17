@@ -11,6 +11,7 @@ import {
   completeSession as completeSessionRepo,
   findPracticeModeByCode,
   findEligiblePublishedQuestions,
+  getQuestionVersionsByIds,
 } from "../repositories/practice.repo";
 import type { PracticeSession, Prisma } from "@prisma/client";
 
@@ -364,6 +365,80 @@ export async function getPracticeSessionAnswers(sessionId: string, userId: strin
       markedForReview: state.__markedForReview,
     };
   });
+}
+
+// getSessionQuestions - returns frozen questions with student-safe data for rendering
+export interface SessionQuestionDTO {
+  questionId: string;
+  questionVersionId: string;
+  questionNumber: number;
+  sequence: number;
+  body: string;
+  questionType: string;
+  marks: number;
+  difficulty: string;
+  options?: Array<{ id: string; body: string; sortOrder: number }>;
+  // No numeric answers, tolerance, or correct answers exposed
+}
+
+export async function getSessionQuestions(sessionId: string, userId: string): Promise<SessionQuestionDTO[]> {
+  const session = await findSessionByIdAndOwner(sessionId, userId);
+  if (!session) {
+    throw errors.notFound("SESSION_NOT_FOUND", `Session ${sessionId} not found or not owned`);
+  }
+
+  let parsedConfig: SessionConfig;
+  try {
+    parsedConfig = await parseSessionConfig(session.config);
+  } catch {
+    throw errors.conflict("INVALID_SESSION_CONFIG", "Session configuration is invalid");
+  }
+
+  const frozenPool = parsedConfig.frozenPoolSnapshot as Array<{ questionId: string; questionVersionId: string; questionNumber: number; sequence: number }> | undefined;
+
+  if (!frozenPool || frozenPool.length === 0) {
+    throw errors.conflict("NO_FROZEN_POOL", "Session does not have a frozen question pool");
+  }
+
+  const questionVersionIds = frozenPool.map((item) => item.questionVersionId);
+  const questionVersions = await getQuestionVersionsByIds(questionVersionIds);
+
+  // Map question versions by ID for quick lookup
+  const versionMap = new Map(questionVersions.map((qv) => [qv.id, qv]));
+
+  // Build response in frozen pool sequence order
+  const questions: SessionQuestionDTO[] = [];
+  for (const poolEntry of frozenPool) {
+    const qv = versionMap.get(poolEntry.questionVersionId);
+    if (!qv) continue; // Skip if question version not found (should not happen)
+
+    const question = qv.question;
+    const questionType = question.questionType;
+
+    const questionDTO: SessionQuestionDTO = {
+      questionId: poolEntry.questionId,
+      questionVersionId: poolEntry.questionVersionId,
+      questionNumber: poolEntry.questionNumber,
+      sequence: poolEntry.sequence,
+      body: question.body,
+      questionType: questionType.code,
+      marks: Number(question.marks),
+      difficulty: question.difficulty,
+    };
+
+    // Add options for MCQ/MSQ (without isCorrect)
+    if (questionType.hasOptions && question.options && question.options.length > 0) {
+      questionDTO.options = question.options.map((opt) => ({
+        id: opt.id,
+        body: opt.body,
+        sortOrder: opt.sortOrder,
+      }));
+    }
+
+    questions.push(questionDTO);
+  }
+
+  return questions;
 }
 
 // completeSession - finalizes the session (sets status to completed, sets endedAt)

@@ -15,7 +15,8 @@ vi.mock("../core/repositories/practice.repo", () => ({
   updateSessionStatus: vi.fn(),
   findPracticeModeByCode: vi.fn(),
   findPublishedQuestionVersion: vi.fn(),
-  findEligiblePublishedQuestions: vi.fn(),
+  findEligiblePublishedQuestions: vi.fn().mockResolvedValue([]),
+  getQuestionVersionsByIds: vi.fn().mockResolvedValue([]),
 }));
 
 import {
@@ -26,6 +27,7 @@ import {
   savePracticeAnswer,
   createSessionRoute,
   recordAttemptRoute,
+  getSessionQuestions,
 } from "../core/services/practice.service";
 import {
   createSession,
@@ -36,6 +38,7 @@ import {
   findPracticeModeByCode,
   findPublishedQuestionVersion,
   findEligiblePublishedQuestions,
+  getQuestionVersionsByIds,
 } from "../core/repositories/practice.repo";
 import type { QuestionVersion } from "@prisma/client";
 import { Prisma } from "@prisma/client";
@@ -50,6 +53,7 @@ const sessionUpdateMock = vi.mocked(updateSessionStatus);
 const findPracticeModeMock = vi.mocked(findPracticeModeByCode);
 const findPublishedQuestionVersionMock = vi.mocked(findPublishedQuestionVersion);
 const findEligiblePublishedQuestionsMock = vi.mocked(findEligiblePublishedQuestions);
+const getQuestionVersionsByIdsMock = vi.mocked(getQuestionVersionsByIds);
 
 function makeSession(overrides: Partial<SessionRow> = {}): SessionRow {
   return {
@@ -126,6 +130,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   findPracticeModeMock.mockResolvedValue({ id: "mode-1", code: "topic", name: "Topic" });
   findPublishedQuestionVersionMock.mockResolvedValue(makeQuestionVersion());
+  getQuestionVersionsByIdsMock.mockResolvedValue([]);
 });
 
 describe("Practice service", () => {
@@ -249,6 +254,7 @@ describe("Practice service", () => {
 
   it("createSessionRoute builds frozen pool from eligible published questions", async () => {
     findPracticeModeMock.mockResolvedValue({ id: "mode-1", code: "topic", name: "Topic" });
+    // @ts-expect-error - test mock with partial data
     findEligiblePublishedQuestionsMock.mockResolvedValue([
       { id: "q-1", versions: [{ id: "qv-1", questionId: "q-1", version: 1, snapshot: {}, reason: null, createdById: "user-1", createdAt: new Date() }], questionType: { id: "qt-1", code: "mcq", name: "MCQ", hasOptions: true, hasNumeric: false, supportsMultiple: false } },
       { id: "q-2", versions: [{ id: "qv-2", questionId: "q-2", version: 1, snapshot: {}, reason: null, createdById: "user-1", createdAt: new Date() }], questionType: { id: "qt-1", code: "mcq", name: "MCQ", hasOptions: true, hasNumeric: false, supportsMultiple: false } },
@@ -304,6 +310,7 @@ describe("Practice service", () => {
 
   it("createSessionRoute rejects when not enough published questions match filters", async () => {
     findPracticeModeMock.mockResolvedValue({ id: "mode-1", code: "topic", name: "Topic" });
+    // @ts-expect-error - test mock with partial data
     findEligiblePublishedQuestionsMock.mockResolvedValue([
       { id: "q-1", versions: [{ id: "qv-1", questionId: "q-1", version: 1, snapshot: {}, reason: null, createdById: "user-1", createdAt: new Date() }], questionType: { id: "qt-1", code: "mcq", name: "MCQ", hasOptions: true, hasNumeric: false, supportsMultiple: false } },
     ] as unknown);
@@ -319,6 +326,7 @@ describe("Practice service", () => {
 
   it("createSessionRoute rejects when eligible questions lack published versions", async () => {
     findPracticeModeMock.mockResolvedValue({ id: "mode-1", code: "topic", name: "Topic" });
+    // @ts-expect-error - test mock with partial data
     findEligiblePublishedQuestionsMock.mockResolvedValue([
       { id: "q-1", versions: [], questionType: { id: "qt-1", code: "mcq", name: "MCQ", hasOptions: true, hasNumeric: false, supportsMultiple: false } },
     ] as unknown);
@@ -386,5 +394,164 @@ describe("Practice service", () => {
     })).rejects.toMatchObject({ code: "INVALID_SESSION_CONFIG" });
 
     expect(upsertAnswerMock).not.toHaveBeenCalled();
+  });
+
+  // getSessionQuestions tests
+  it("getSessionQuestions returns frozen questions with student-safe data", async () => {
+    const sessionWithPool = makeSessionWithFrozenPool();
+
+    findSessionMock.mockResolvedValue(sessionWithPool);
+    // @ts-expect-error - test mock with partial data
+    getQuestionVersionsByIdsMock.mockResolvedValue([
+      {
+        id: "qv-1",
+        question: {
+          id: "q-1",
+          body: "What is 2+2?",
+          marks: new Prisma.Decimal(1),
+          difficulty: "easy",
+          questionType: { code: "mcq", hasOptions: true, hasNumeric: false, supportsMultiple: false },
+          options: [
+            { id: "opt-1", body: "3", sortOrder: 1, questionId: "q-1", isCorrect: false },
+            { id: "opt-2", body: "4", sortOrder: 2, questionId: "q-1", isCorrect: false },
+            { id: "opt-3", body: "5", sortOrder: 3, questionId: "q-1", isCorrect: false },
+          ],
+        },
+      },
+      {
+        id: "qv-2",
+        question: {
+          id: "q-2",
+          body: "What is 3*3?",
+          marks: new Prisma.Decimal(2),
+          difficulty: "medium",
+          questionType: { code: "msq", hasOptions: true, hasNumeric: false, supportsMultiple: true },
+          options: [
+            { id: "opt-4", body: "6", sortOrder: 1, questionId: "q-2", isCorrect: false },
+            { id: "opt-5", body: "9", sortOrder: 2, questionId: "q-2", isCorrect: false },
+          ],
+        },
+      },
+    ] as unknown);
+
+    const questions = await getSessionQuestions("session-1", "user-1");
+
+    expect(findSessionMock).toHaveBeenCalledWith("session-1", "user-1");
+    expect(getQuestionVersionsByIdsMock).toHaveBeenCalledWith(["qv-1", "qv-2"]);
+    expect(questions).toHaveLength(2);
+
+    expect(questions[0]).toMatchObject({
+      questionId: "q-1",
+      questionVersionId: "qv-1",
+      questionNumber: 1,
+      sequence: 1,
+      body: "What is 2+2?",
+      questionType: "mcq",
+      marks: 1,
+      difficulty: "easy",
+    });
+    expect(questions[0].options).toHaveLength(3);
+    expect(questions[0].options).toEqual([
+      { id: "opt-1", body: "3", sortOrder: 1 },
+      { id: "opt-2", body: "4", sortOrder: 2 },
+      { id: "opt-3", body: "5", sortOrder: 3 },
+    ]);
+
+    expect(questions[1]).toMatchObject({
+      questionId: "q-2",
+      questionVersionId: "qv-2",
+      questionNumber: 2,
+      sequence: 2,
+      body: "What is 3*3?",
+      questionType: "msq",
+      marks: 2,
+      difficulty: "medium",
+    });
+    expect(questions[1].options).toHaveLength(2);
+  });
+
+  it("getSessionQuestions rejects non-owner", async () => {
+    findSessionMock.mockResolvedValue(null);
+
+    await expect(getSessionQuestions("session-1", "other")).rejects.toMatchObject({ code: "SESSION_NOT_FOUND" });
+    expect(getQuestionVersionsByIdsMock).not.toHaveBeenCalled();
+  });
+
+  it("getSessionQuestions rejects when session has no frozen pool", async () => {
+    findSessionMock.mockResolvedValue(makeSession({ status: "in_progress" }));
+
+    await expect(getSessionQuestions("session-1", "user-1")).rejects.toMatchObject({ code: "NO_FROZEN_POOL" });
+    expect(getQuestionVersionsByIdsMock).not.toHaveBeenCalled();
+  });
+
+  it("getSessionQuestions rejects when session config is invalid", async () => {
+    findSessionMock.mockResolvedValue(makeSession({ config: "invalid" }));
+
+    await expect(getSessionQuestions("session-1", "user-1")).rejects.toMatchObject({ code: "INVALID_SESSION_CONFIG" });
+    expect(getQuestionVersionsByIdsMock).not.toHaveBeenCalled();
+  });
+
+  it("getSessionQuestions does not expose correct answers or numeric answers", async () => {
+    const sessionWithPool = makeSessionWithFrozenPool();
+
+    findSessionMock.mockResolvedValue(sessionWithPool);
+    // @ts-expect-error - test mock with partial data
+    getQuestionVersionsByIdsMock.mockResolvedValue([
+      {
+        id: "qv-1",
+        question: {
+          id: "q-1",
+          body: "What is 2+2?",
+          marks: new Prisma.Decimal(1),
+          difficulty: "easy",
+          questionType: { code: "mcq", hasOptions: true, hasNumeric: false, supportsMultiple: false },
+          options: [
+            { id: "opt-1", body: "3", sortOrder: 1, questionId: "q-1", isCorrect: true }, // Correct answer in DB
+            { id: "opt-2", body: "4", sortOrder: 2, questionId: "q-1", isCorrect: false },
+          ],
+        },
+      },
+    ] as unknown);
+
+    const questions = await getSessionQuestions("session-1", "user-1");
+
+    expect(questions[0].options).toHaveLength(2);
+    // Verify isCorrect is NOT in the response
+    for (const opt of questions[0].options ?? []) {
+      expect(opt).not.toHaveProperty("isCorrect");
+    }
+  });
+
+  it("getSessionQuestions preserves frozen pool sequence order", async () => {
+    const frozenPool = [
+      { questionId: "q-1", questionVersionId: "qv-1", questionNumber: 1, sequence: 1 },
+      { questionId: "q-2", questionVersionId: "qv-2", questionNumber: 2, sequence: 2 },
+      { questionId: "q-3", questionVersionId: "qv-3", questionNumber: 3, sequence: 3 },
+    ];
+    const sessionWithPool = makeSession({
+      config: {
+        mode: "topic",
+        filters: { topic_id: "topic-1" },
+        question_count: 3,
+        pool: ["q-1", "q-2", "q-3"],
+        frozenPoolSnapshot: frozenPool,
+        selectionMetadata: { poolSnapshot: frozenPool, shuffleSeed: 42, createdAt: "2026-01-01T00:00:00Z" },
+      },
+    });
+
+    findSessionMock.mockResolvedValue(sessionWithPool);
+    // @ts-expect-error - test mock with partial data
+    getQuestionVersionsByIdsMock.mockResolvedValue([
+      { id: "qv-1", question: { id: "q-1", body: "Q1", marks: new Prisma.Decimal(1), difficulty: "easy", questionType: { code: "mcq", hasOptions: true, hasNumeric: false, supportsMultiple: false }, options: [] } },
+      { id: "qv-2", question: { id: "q-2", body: "Q2", marks: new Prisma.Decimal(1), difficulty: "easy", questionType: { code: "mcq", hasOptions: true, hasNumeric: false, supportsMultiple: false }, options: [] } },
+      { id: "qv-3", question: { id: "q-3", body: "Q3", marks: new Prisma.Decimal(1), difficulty: "easy", questionType: { code: "mcq", hasOptions: true, hasNumeric: false, supportsMultiple: false }, options: [] } },
+    ] as unknown);
+
+    const questions = await getSessionQuestions("session-1", "user-1");
+
+    expect(questions).toHaveLength(3);
+    expect(questions.map(q => q.sequence)).toEqual([1, 2, 3]);
+    expect(questions.map(q => q.questionNumber)).toEqual([1, 2, 3]);
+    expect(questions.map(q => q.questionId)).toEqual(["q-1", "q-2", "q-3"]);
   });
 });

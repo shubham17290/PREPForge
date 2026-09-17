@@ -129,6 +129,14 @@ practiceRouter.get(
 );
 
 practiceRouter.get(
+  "/:id/questions",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    ok(res, 200, await practiceService.getSessionQuestions(sessionIdOr404(req.params["id"]), req.principal?.id as string));
+  }),
+);
+
+practiceRouter.get(
   "/:id/result",
   requireAuth,
   asyncHandler(async (req, res) => {

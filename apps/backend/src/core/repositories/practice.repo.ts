@@ -186,3 +186,22 @@ export function listAnswersForSession(sessionId: string) {
     select: { questionVersionId: true, sequence: true, selectedAnswers: true },
   });
 }
+
+export function getQuestionVersionsByIds(questionVersionIds: string[]) {
+  if (questionVersionIds.length === 0) return [];
+  return prisma.questionVersion.findMany({
+    where: { id: { in: questionVersionIds } },
+    include: {
+      question: {
+        include: {
+          options: {
+            where: { isCorrect: false }, // Never expose correct answers to students
+            orderBy: { sortOrder: "asc" },
+          },
+          numericAnswers: false, // Never expose numeric answers/tolerance to students
+          questionType: true,
+        },
+      },
+    },
+  });
+}
