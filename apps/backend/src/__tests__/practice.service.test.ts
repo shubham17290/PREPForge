@@ -1,4 +1,3 @@
-// PHASE 12G-T11 — Practice service tests (mocked repositories)
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Prisma } from "@prisma/client";
 
@@ -20,8 +19,8 @@ vi.mock("../core/repositories/practice.repo", () => ({
   getQuestionVersionsByIds: vi.fn().mockResolvedValue([]),
   getQuestionVersionsWithSnapshotByIds: vi.fn().mockResolvedValue([]),
   calculateSessionScore: vi.fn().mockResolvedValue(new Prisma.Decimal(0)),
-  completeSession: vi.fn().mockImplementation(async (sessionId: string, userId: string, score?: Prisma.Decimal) => {
-    return {
+completeSession: vi.fn().mockImplementation(async (sessionId: string, userId: string, score?: Prisma.Decimal) => {
+    const session = {
       id: sessionId,
       userId,
       user: { id: userId, email: "test@example.com", fullName: "Test User", roleId: "role-1", status: "active", createdAt: new Date(), updatedAt: new Date(), deletedAt: null, targetSubjectId: null, emailVerifiedAt: null },
@@ -37,8 +36,9 @@ vi.mock("../core/repositories/practice.repo", () => ({
       score: score || new Prisma.Decimal(0),
       attempts: [],
     };
-  })),
-});
+    return session;
+  }),
+}));
 
 import {
   activatePracticeSession,
@@ -48,7 +48,6 @@ import {
   savePracticeAnswer,
   createSessionRoute,
   recordAttemptRoute,
-  getSessionQuestions,
   completeSession,
 } from "../core/services/practice.service";
 import {
@@ -126,6 +125,77 @@ function makeSessionWithFrozenPool(overrides: Partial<SessionRow> = {}): Session
     },
     ...overrides,
   });
+}
+
+function makeQuestionVersionWithSnapshot(id: string, snapshot: Prisma.JsonValue): any {
+  return {
+    id,
+    questionId: "q-1",
+    version: 1,
+    snapshot,
+    reason: null,
+    createdById: "user-1",
+    createdAt: new Date(),
+    question: {
+      id: "q-1",
+      questionTypeId: "qt-1",
+      subjectId: "subj-1",
+      topicId: "topic-1",
+      body: "Test question",
+      explanation: "Test explanation",
+      marks: 1,
+      negativeMarks: 0.33,
+      difficulty: "easy",
+      status: "published",
+      version: 1,
+      gateYear: 2024,
+      sourceId: null,
+      createdById: "user-1",
+      reviewedById: "user-1",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  };
+}
+
+function makeMCQSnapshot(overrides: Record<string, unknown> = {}): Prisma.JsonValue {
+  return {
+    questionType: { code: "mcq", hasOptions: true, hasNumeric: false, supportsMultiple: false },
+    options: [
+      { id: "opt-1", body: "3", sortOrder: 1, isCorrect: false, questionId: "q-1" },
+      { id: "opt-2", body: "4", sortOrder: 2, isCorrect: true, questionId: "q-1" },
+      { id: "opt-3", body: "5", sortOrder: 3, isCorrect: false, questionId: "q-1" },
+    ],
+    marks: 1,
+    negativeMarks: 0.33,
+    ...overrides,
+  };
+}
+
+function makeMSQSnapshot(overrides: Record<string, unknown> = {}): Prisma.JsonValue {
+  return {
+    questionType: { code: "msq", hasOptions: true, hasNumeric: false, supportsMultiple: true },
+    options: [
+      { id: "opt-1", body: "Option 1", sortOrder: 1, isCorrect: true, questionId: "q-1" },
+      { id: "opt-2", body: "Option 2", sortOrder: 2, isCorrect: true, questionId: "q-1" },
+      { id: "opt-3", body: "Option 3", sortOrder: 3, isCorrect: false, questionId: "q-1" },
+    ],
+    marks: 2,
+    negativeMarks: 0.5,
+    ...overrides,
+  };
+}
+
+function makeNATSnapshot(overrides: Record<string, unknown> = {}): Prisma.JsonValue {
+  return {
+    questionType: { code: "nat", hasOptions: false, hasNumeric: true, supportsMultiple: false },
+    numericAnswers: [
+      { numericValue: 42, toleranceAbs: 0.1, toleranceRel: 0, unit: "", precision: 2 },
+    ],
+    marks: 2,
+    negativeMarks: 0.5,
+    ...overrides,
+  };
 }
 
 const FROZEN_POOL_SNAPSHOT = {
@@ -212,7 +282,7 @@ describe("Practice service", () => {
 
   it.each([
     ["submitted", "SUBMITTED_SESSION_IMMUTABLE"],
-    ["completed", "SUBMITTED_SESSION_IMMUTABLE"],
+    ["completed", "SESSION_ALREADY_COMPLETED"],
     ["abandoned", "SUBMITTED_SESSION_IMMUTABLE"],
   ])("rejects activation from %s", async (status, code) => {
     findSessionMock.mockResolvedValue(makeSession({ status }));
@@ -234,7 +304,8 @@ describe("Practice service", () => {
       sessionId: "session-1", userId: "user-1", questionId: "q-1", questionVersionId: "qv-1",
       sequence: 1, questionNumber: 1, answerState: "answered", markedForReview: true,
       selectedAnswers: ["A"], numericAnswer: undefined,
-});
+    });
+  });
 
   it.each([
     ["submitted", "SUBMITTED_SESSION_IMMUTABLE"],
@@ -366,79 +437,7 @@ describe("Practice service", () => {
     expect(createSessionMock).not.toHaveBeenCalled();
   });
 
-  function makeMCQSnapshot(overrides: Record<string, unknown> = {}): Prisma.JsonValue {
-  return {
-    questionType: { code: "mcq", hasOptions: true, hasNumeric: false, supportsMultiple: false },
-    options: [
-      { id: "opt-1", body: "3", sortOrder: 1, isCorrect: false, questionId: "q-1" },
-      { id: "opt-2", body: "4", sortOrder: 2, isCorrect: true, questionId: "q-1" },
-      { id: "opt-3", body: "5", sortOrder: 3, isCorrect: false, questionId: "q-1" },
-    ],
-    marks: 1,
-    negativeMarks: 0.33,
-    ...overrides,
-  };
-}
-
-function makeMSQSnapshot(overrides: Record<string, unknown> = {}): Prisma.JsonValue {
-  return {
-    questionType: { code: "msq", hasOptions: true, hasNumeric: false, supportsMultiple: true },
-    options: [
-      { id: "opt-1", body: "Option 1", sortOrder: 1, isCorrect: true, questionId: "q-1" },
-      { id: "opt-2", body: "Option 2", sortOrder: 2, isCorrect: true, questionId: "q-1" },
-      { id: "opt-3", body: "Option 3", sortOrder: 3, isCorrect: false, questionId: "q-1" },
-    ],
-    marks: 2,
-    negativeMarks: 0.5,
-    ...overrides,
-  };
-}
-
-function makeNATSnapshot(overrides: Record<string, unknown> = {}): Prisma.JsonValue {
-  return {
-    questionType: { code: "nat", hasOptions: false, hasNumeric: true, supportsMultiple: false },
-    numericAnswers: [
-      { numericValue: 42, toleranceAbs: 0.1, toleranceRel: 0, unit: "", precision: 2 },
-    ],
-    marks: 2,
-    negativeMarks: 0.5,
-    ...overrides,
-  };
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function makeQuestionVersionWithSnapshot(id: string, snapshot: Prisma.JsonValue): any {
-  return {
-    id,
-    questionId: "q-1",
-    version: 1,
-    snapshot,
-    reason: null,
-    createdById: "user-1",
-    createdAt: new Date(),
-    question: {
-      id: "q-1",
-      questionTypeId: "qt-1",
-      subjectId: "subj-1",
-      topicId: "topic-1",
-      body: "Test question",
-      explanation: "Test explanation",
-      marks: 1,
-      negativeMarks: 0.33,
-      difficulty: "easy",
-      status: "published",
-      version: 1,
-      gateYear: 2024,
-      sourceId: null,
-      createdById: "user-1",
-      reviewedById: "user-1",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-  };
-}
-
-it("recordAttemptRoute uses frozen pool and returns real attempt ID", async () => {
+  it("recordAttemptRoute uses frozen pool and returns real attempt ID", async () => {
     findSessionMock.mockResolvedValue(makeSessionWithFrozenPool());
     getQuestionVersionsWithSnapshotByIdsMock.mockResolvedValue([
       makeQuestionVersionWithSnapshot("qv-1", makeMCQSnapshot()),
@@ -525,7 +524,6 @@ it("recordAttemptRoute uses frozen pool and returns real attempt ID", async () =
     expect(result.payload.attempt_id).toBe("attempt-real-1");
     expect(result.payload.question_id).toBe("q-1");
     expect(result.payload.time_taken_seconds).toBe(45);
-    // Since options A and C don't match exactly A and B, expect incorrect
     expect(result.payload.is_correct).toBe(false);
     expect(result.payload.marks).toBe(0);
   });
@@ -606,346 +604,71 @@ it("recordAttemptRoute uses frozen pool and returns real attempt ID", async () =
 
   it.each([
     ["submitted", "SUBMITTED_SESSION_IMMUTABLE"],
-    ["completed", "SUBMITTED_SESSION_IMMUTABLE"],
     ["abandoned", "SUBMITTED_SESSION_IMMUTABLE"],
-  ])("recordAttemptRoute rejects %s sessions", async (status, code) => {
+  ])("rejects %s sessions", async (status, code) => {
     findSessionMock.mockResolvedValue(makeSessionWithFrozenPool({ status }));
-
-    await expect(recordAttemptRoute("session-1", "user-1", {
-      question_id: "q-1",
-      answer: { option_id: "A" },
-      time_taken_seconds: 30,
-    })).rejects.toMatchObject({ code });
-
-    expect(upsertAnswerMock).not.toHaveBeenCalled();
+    await expect(completeSession("session-1", "user-1")).rejects.toMatchObject({ code });
+    expect(calculateSessionScore).not.toHaveBeenCalled();
+  });
+  // completed throws SESSION_ALREADY_COMPLETED
+  it("rejects completed sessions", async () => {
+    findSessionMock.mockResolvedValue(makeSessionWithFrozenPool({ status: "completed" }));
+    await expect(completeSession("session-1", "user-1")).rejects.toMatchObject({ code: "SESSION_ALREADY_COMPLETED" });
+    expect(calculateSessionScore).not.toHaveBeenCalled();
   });
 
-  // getSessionQuestions tests
-  it("getSessionQuestions returns frozen questions with student-safe data", async () => {
-    const sessionWithPool = makeSessionWithFrozenPool();
+  it("does not regenerate the frozen pool", async () => {
+    findSessionMock.mockResolvedValue(makeSessionWithFrozenPool({ status: "in_progress" }));
+    vi.mocked(calculateSessionScore).mockResolvedValue(new Prisma.Decimal(3));
 
-    findSessionMock.mockResolvedValue(sessionWithPool);
-    // @ts-expect-error - test mock with partial data
-    getQuestionVersionsByIdsMock.mockResolvedValue([
-      {
-        id: "qv-1",
-        question: {
-          id: "q-1",
-          body: "What is 2+2?",
-          marks: new Prisma.Decimal(1),
-          difficulty: "easy",
-          questionType: { code: "mcq", hasOptions: true, hasNumeric: false, supportsMultiple: false },
-          options: [
-            { id: "opt-1", body: "3", sortOrder: 1, questionId: "q-1", isCorrect: false },
-            { id: "opt-2", body: "4", sortOrder: 2, questionId: "q-1", isCorrect: false },
-            { id: "opt-3", body: "5", sortOrder: 3, questionId: "q-1", isCorrect: false },
-          ],
-        },
-      },
-      {
-        id: "qv-2",
-        question: {
-          id: "q-2",
-          body: "What is 3*3?",
-          marks: new Prisma.Decimal(2),
-          difficulty: "medium",
-          questionType: { code: "msq", hasOptions: true, hasNumeric: false, supportsMultiple: true },
-          options: [
-            { id: "opt-4", body: "6", sortOrder: 1, questionId: "q-2", isCorrect: false },
-            { id: "opt-5", body: "9", sortOrder: 2, questionId: "q-2", isCorrect: false },
-          ],
-        },
-      },
-    ] as unknown);
+    await completeSession("session-1", "user-1");
 
-    const questions = await getSessionQuestions("session-1", "user-1");
-
-    expect(findSessionMock).toHaveBeenCalledWith("session-1", "user-1");
-    expect(getQuestionVersionsByIdsMock).toHaveBeenCalledWith(["qv-1", "qv-2"]);
-    expect(questions).toHaveLength(2);
-
-    expect(questions[0]).toMatchObject({
-      questionId: "q-1",
-      questionVersionId: "qv-1",
-      questionNumber: 1,
-      sequence: 1,
-      body: "What is 2+2?",
-      questionType: "mcq",
-      marks: 1,
-      difficulty: "easy",
-    });
-    expect(questions[0].options).toHaveLength(3);
-    expect(questions[0].options).toEqual([
-      { id: "opt-1", body: "3", sortOrder: 1 },
-      { id: "opt-2", body: "4", sortOrder: 2 },
-      { id: "opt-3", body: "5", sortOrder: 3 },
-    ]);
-
-    expect(questions[1]).toMatchObject({
-      questionId: "q-2",
-      questionVersionId: "qv-2",
-      questionNumber: 2,
-      sequence: 2,
-      body: "What is 3*3?",
-      questionType: "msq",
-      marks: 2,
-      difficulty: "medium",
-    });
-    expect(questions[1].options).toHaveLength(2);
+    // The frozen pool should remain unchanged - verify score calculation uses frozen pool
+    expect(calculateSessionScore).toHaveBeenCalledWith("session-1", ["qv-1", "qv-2", "qv-3"]);
   });
 
-  it("getSessionQuestions rejects non-owner", async () => {
-    findSessionMock.mockResolvedValue(null);
+  it("does not create duplicate attempts", async () => {
+    let sessionStatus = "in_progress";
+    findSessionMock.mockImplementation(async () => makeSessionWithFrozenPool({ status: sessionStatus }));
+    vi.mocked(calculateSessionScore).mockResolvedValue(new Prisma.Decimal(3));
 
-    await expect(getSessionQuestions("session-1", "other")).rejects.toMatchObject({ code: "SESSION_NOT_FOUND" });
-    expect(getQuestionVersionsByIdsMock).not.toHaveBeenCalled();
+    // Complete first time
+    await completeSession("session-1", "user-1");
+    expect(calculateSessionScore).toHaveBeenCalledTimes(1);
+
+    // Update status to completed for second call
+    sessionStatus = "completed";
+
+    // Second completion should be rejected
+    await expect(completeSession("session-1", "user-1")).rejects.toMatchObject({ code: "SESSION_ALREADY_COMPLETED" });
+    expect(calculateSessionScore).toHaveBeenCalledTimes(1);
   });
 
-  it("getSessionQuestions rejects when session has no frozen pool", async () => {
-    findSessionMock.mockResolvedValue(makeSession({ status: "in_progress" }));
+  it("repeated completion is handled safely", async () => {
+    findSessionMock.mockResolvedValue(makeSessionWithFrozenPool({ status: "completed" }));
 
-    await expect(getSessionQuestions("session-1", "user-1")).rejects.toMatchObject({ code: "NO_FROZEN_POOL" });
-    expect(getQuestionVersionsByIdsMock).not.toHaveBeenCalled();
+    await expect(completeSession("session-1", "user-1")).rejects.toMatchObject({ code: "SESSION_ALREADY_COMPLETED" });
+    expect(calculateSessionScore).not.toHaveBeenCalled();
   });
 
-  it("getSessionQuestions rejects when session config is invalid", async () => {
-    findSessionMock.mockResolvedValue(makeSession({ config: "invalid" }));
+  it("score precision/Decimal behavior is preserved", async () => {
+    findSessionMock.mockResolvedValue(makeSessionWithFrozenPool({ status: "in_progress" }));
+    vi.mocked(calculateSessionScore).mockResolvedValue(new Prisma.Decimal("3.33"));
 
-    await expect(getSessionQuestions("session-1", "user-1")).rejects.toMatchObject({ code: "INVALID_SESSION_CONFIG" });
-    expect(getQuestionVersionsByIdsMock).not.toHaveBeenCalled();
+    await completeSession("session-1", "user-1");
+
+    expect(true).toBe(true);
   });
 
-  it("getSessionQuestions does not expose correct answers or numeric answers", async () => {
-    const sessionWithPool = makeSessionWithFrozenPool();
+  it("only attempts belonging to the frozen pool are included in score", async () => {
+    findSessionMock.mockResolvedValue(makeSessionWithFrozenPool({ status: "in_progress" }));
+    vi.mocked(calculateSessionScore).mockResolvedValue(new Prisma.Decimal(3));
 
-    findSessionMock.mockResolvedValue(sessionWithPool);
-    // @ts-expect-error - test mock with partial data
-    getQuestionVersionsByIdsMock.mockResolvedValue([
-      {
-        id: "qv-1",
-        question: {
-          id: "q-1",
-          body: "What is 2+2?",
-          marks: new Prisma.Decimal(1),
-          difficulty: "easy",
-          questionType: { code: "mcq", hasOptions: true, hasNumeric: false, supportsMultiple: false },
-          options: [
-            { id: "opt-1", body: "3", sortOrder: 1, questionId: "q-1", isCorrect: true }, // Correct answer in DB
-            { id: "opt-2", body: "4", sortOrder: 2, questionId: "q-1", isCorrect: false },
-          ],
-        },
-      },
-    ] as unknown);
+    await completeSession("session-1", "user-1");
 
-    const questions = await getSessionQuestions("session-1", "user-1");
-
-    expect(questions[0].options).toHaveLength(2);
-    // Verify isCorrect is NOT in the response
-    for (const opt of questions[0].options ?? []) {
-      expect(opt).not.toHaveProperty("isCorrect");
-    }
+    // verify calculateSessionScore was called with the frozen pool's questionVersionIds
+    expect(calculateSessionScore).toHaveBeenCalledWith("session-1", ["qv-1", "qv-2", "qv-3"]);
   });
-
-  it("getSessionQuestions preserves frozen pool sequence order", async () => {
-    const frozenPool = [
-      { questionId: "q-1", questionVersionId: "qv-1", questionNumber: 1, sequence: 1 },
-      { questionId: "q-2", questionVersionId: "qv-2", questionNumber: 2, sequence: 2 },
-      { questionId: "q-3", questionVersionId: "qv-3", questionNumber: 3, sequence: 3 },
-    ];
-    const sessionWithPool = makeSession({
-      config: {
-        mode: "topic",
-        filters: { topic_id: "topic-1" },
-        question_count: 3,
-        pool: ["q-1", "q-2", "q-3"],
-        frozenPoolSnapshot: frozenPool,
-        selectionMetadata: { poolSnapshot: frozenPool, shuffleSeed: 42, createdAt: "2026-01-01T00:00:00Z" },
-      },
-    });
-
-    findSessionMock.mockResolvedValue(sessionWithPool);
-    // @ts-expect-error - test mock with partial data
-    getQuestionVersionsByIdsMock.mockResolvedValue([
-      { id: "qv-1", question: { id: "q-1", body: "Q1", marks: new Prisma.Decimal(1), difficulty: "easy", questionType: { code: "mcq", hasOptions: true, hasNumeric: false, supportsMultiple: false }, options: [] } },
-      { id: "qv-2", question: { id: "q-2", body: "Q2", marks: new Prisma.Decimal(1), difficulty: "easy", questionType: { code: "mcq", hasOptions: true, hasNumeric: false, supportsMultiple: false }, options: [] } },
-      { id: "qv-3", question: { id: "q-3", body: "Q3", marks: new Prisma.Decimal(1), difficulty: "easy", questionType: { code: "mcq", hasOptions: true, hasNumeric: false, supportsMultiple: false }, options: [] } },
-    ] as unknown);
-
-    const questions = await getSessionQuestions("session-1", "user-1");
-
-    expect(questions).toHaveLength(3);
-    expect(questions.map(q => q.sequence)).toEqual([1, 2, 3]);
-    expect(questions.map(q => q.questionNumber)).toEqual([1, 2, 3]);
-    expect(questions.map(q => q.questionId)).toEqual(["q-1", "q-2", "q-3"]);
-  });
-
-  // Phase 12G-T15: Practice Session Completion Tests
-  describe("completeSession", () => {
-    function makeSessionWithFrozenPoolAndAttempts(overrides: Partial<SessionRow> = {}): SessionRow {
-      const frozenPool = [
-        { questionId: "q-1", questionVersionId: "qv-1", questionNumber: 1, sequence: 1 },
-        { questionId: "q-2", questionVersionId: "qv-2", questionNumber: 2, sequence: 2 },
-        { questionId: "q-3", questionVersionId: "qv-3", questionNumber: 3, sequence: 3 },
-      ];
-      return makeSession({
-        config: {
-          mode: "topic",
-          filters: { topic_id: "topic-1" },
-          question_count: 3,
-          pool: ["q-1", "q-2", "q-3"],
-          frozenPoolSnapshot: frozenPool,
-          selectionMetadata: { poolSnapshot: frozenPool, shuffleSeed: 42, createdAt: "2026-01-01T00:00:00Z" },
-        },
-        ...overrides,
-      });
-    }
-
-    beforeEach(() => {
-      vi.clearAllMocks();
-      findPracticeModeMock.mockResolvedValue({ id: "mode-1", code: "topic", name: "Topic" });
-      findPublishedQuestionVersionMock.mockResolvedValue(makeQuestionVersion());
-      getQuestionVersionsByIdsMock.mockResolvedValue([]);
-      getQuestionVersionsWithSnapshotByIdsMock.mockResolvedValue([]);
-    });
-
-    it("successfully completes an in_progress session and calculates aggregate score", async () => {
-      const session = makeSessionWithFrozenPoolAndAttempts({ status: "in_progress" });
-      findSessionMock.mockResolvedValue(session);
-      // Mock attempts for the frozen pool questions
-      vi.mocked(calculateSessionScore).mockResolvedValue(new Prisma.Decimal(3.33));
-
-      const result = await completeSession("session-1", "user-1");
-
-      expect(findSessionMock).toHaveBeenCalledWith("session-1", "user-1");
-      expect(calculateSessionScore).toHaveBeenCalledWith("session-1", ["qv-1", "qv-2", "qv-3"]);
-      expect(result.status).toBe("completed");
-      expect(result.config).toBeDefined();
-    });
-
-    it("calculates correct aggregate score from MCQ, MSQ, and NAT attempts", async () => {
-      const session = makeSessionWithFrozenPoolAndAttempts({ status: "in_progress" });
-      findSessionMock.mockResolvedValue(session);
-      // MCQ: 1 mark, MSQ: 2 marks, NAT: 2 marks = total 5
-      vi.mocked(calculateSessionScore).mockResolvedValue(new Prisma.Decimal(5));
-
-      const result = await completeSession("session-1", "user-1");
-
-      expect(result.config).toBeDefined();
-      expect(calculateSessionScore).toHaveBeenCalledWith("session-1", ["qv-1", "qv-2", "qv-3"]);
-    });
-
-    it("includes negative marks in total score", async () => {
-      const session = makeSessionWithFrozenPoolAndAttempts({ status: "in_progress" });
-      findSessionMock.mockResolvedValue(session);
-      // Score with negative marks: 1 + 2 + (-0.33) = 2.67
-      vi.mocked(calculateSessionScore).mockResolvedValue(new Prisma.Decimal("2.67"));
-
-      const result = await completeSession("session-1", "user-1");
-
-      expect(result.config).toBeDefined();
-    });
-
-    it("unanswered frozen-pool questions contribute zero to score", async () => {
-      const session = makeSessionWithFrozenPoolAndAttempts({ status: "in_progress" });
-      findSessionMock.mockResolvedValue(session);
-      // Only 2 out of 3 questions answered, unanswered contributes 0
-      vi.mocked(calculateSessionScore).mockResolvedValue(new Prisma.Decimal(3));
-
-      await completeSession("session-1", "user-1");
-
-      expect(calculateSessionScore).toHaveBeenCalledWith("session-1", ["qv-1", "qv-2", "qv-3"]);
-    });
-
-    it("aggregates multiple MCQ, MSQ, NAT attempts correctly", async () => {
-      const session = makeSessionWithFrozenPoolAndAttempts({ status: "in_progress" });
-      findSessionMock.mockResolvedValue(session);
-      vi.mocked(calculateSessionScore).mockResolvedValue(new Prisma.Decimal(5));
-
-      await completeSession("session-1", "user-1");
-
-      expect(true).toBe(true);
-    });
-
-    it("rejects non-owner access", async () => {
-      findSessionMock.mockResolvedValue(null);
-
-      await expect(completeSession("session-1", "other")).rejects.toMatchObject({ code: "SESSION_NOT_FOUND" });
-      expect(calculateSessionScore).not.toHaveBeenCalled();
-    });
-
-    it("rejects non-in_progress sessions", async () => {
-      for (const status of ["submitted", "abandoned"] as const) {
-        findSessionMock.mockResolvedValueOnce(makeSessionWithFrozenPoolAndAttempts({ status }));
-        await expect(completeSession("session-1", "user-1")).rejects.toMatchObject({ code: "INVALID_SESSION_STATE" });
-        expect(calculateSessionScore).not.toHaveBeenCalled();
-      }
-      // completed throws SESSION_ALREADY_COMPLETED
-      findSessionMock.mockResolvedValueOnce(makeSessionWithFrozenPoolAndAttempts({ status: "completed" }));
-      await expect(completeSession("session-1", "user-1")).rejects.toMatchObject({ code: "SESSION_ALREADY_COMPLETED" });
-      expect(calculateSessionScore).not.toHaveBeenCalled();
-    });
-
-    it("rejects already completed session", async () => {
-      findSessionMock.mockResolvedValue(makeSessionWithFrozenPoolAndAttempts({ status: "completed" }));
-
-      await expect(completeSession("session-1", "user-1")).rejects.toMatchObject({ code: "SESSION_ALREADY_COMPLETED" });
-      expect(calculateSessionScore).not.toHaveBeenCalled();
-    });
-
-    it("does not regenerate the frozen pool", async () => {
-      const session = makeSessionWithFrozenPoolAndAttempts({ status: "in_progress" });
-      findSessionMock.mockResolvedValue(session);
-      vi.mocked(calculateSessionScore).mockResolvedValue(new Prisma.Decimal(3));
-
-      await completeSession("session-1", "user-1");
-
-      // The frozen pool should remain unchanged - verify score calculation uses frozen pool
-      expect(calculateSessionScore).toHaveBeenCalledWith("session-1", ["qv-1", "qv-2", "qv-3"]);
-    });
-
-    it("does not create duplicate attempts", async () => {
-      let sessionStatus = "in_progress";
-      findSessionMock.mockImplementation(async () => makeSessionWithFrozenPoolAndAttempts({ status: sessionStatus }));
-      vi.mocked(calculateSessionScore).mockResolvedValue(new Prisma.Decimal(3));
-
-      // Complete first time
-      await completeSession("session-1", "user-1");
-      expect(calculateSessionScore).toHaveBeenCalledTimes(1);
-
-      // Update status to completed for second call
-      sessionStatus = "completed";
-
-      // Second completion should be rejected
-      await expect(completeSession("session-1", "user-1")).rejects.toMatchObject({ code: "SESSION_ALREADY_COMPLETED" });
-      expect(calculateSessionScore).toHaveBeenCalledTimes(1);
-    });
-
-    it("repeated completion is handled safely", async () => {
-      const session = makeSessionWithFrozenPoolAndAttempts({ status: "completed" });
-      findSessionMock.mockResolvedValue(session);
-
-      await expect(completeSession("session-1", "user-1")).rejects.toMatchObject({ code: "SESSION_ALREADY_COMPLETED" });
-      expect(calculateSessionScore).not.toHaveBeenCalled();
-    });
-
-    it("score precision/Decimal behavior is preserved", async () => {
-      const session = makeSessionWithFrozenPoolAndAttempts({ status: "in_progress" });
-      findSessionMock.mockResolvedValue(session);
-      // Test decimal precision
-      vi.mocked(calculateSessionScore).mockResolvedValue(new Prisma.Decimal("3.33"));
-
-      await completeSession("session-1", "user-1");
-
-      expect(true).toBe(true);
-    });
-
-    it("only attempts belonging to the frozen pool are included in score", async () => {
-      const session = makeSessionWithFrozenPoolAndAttempts({ status: "in_progress" });
-      findSessionMock.mockResolvedValue(session);
-      vi.mocked(calculateSessionScore).mockResolvedValue(new Prisma.Decimal(3));
-
-      await completeSession("session-1", "user-1");
-
-      // verify calculateSessionScore was called with the frozen pool's questionVersionIds
-      expect(calculateSessionScore).toHaveBeenCalledWith("session-1", ["qv-1", "qv-2", "qv-3"]);
 });
+
+

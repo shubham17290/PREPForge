@@ -695,8 +695,9 @@ export async function getResult(sessionId: string, userId: string): Promise<Sess
     if (attempt?.selectedAnswers) {
       const raw = attempt.selectedAnswers;
       const state = raw !== null && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+      const values = state.values as string[] | undefined;
       studentAnswer = {
-        selectedAnswers: Array.isArray(raw) ? raw : ((state.values as string[]) ?? []),
+        selectedAnswers: Array.isArray(raw) ? raw : (values ?? []),
         numericAnswer: (state.numericAnswer as number | null) ?? null,
       };
     }
