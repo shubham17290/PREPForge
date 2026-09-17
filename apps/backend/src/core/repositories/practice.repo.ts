@@ -68,10 +68,10 @@ export function updateSessionStatus(sessionId: string, status: string, userId: s
   return prisma.practiceSession.update({ where: { id: sessionId, userId }, data: { status } });
 }
 
-export function completeSession(sessionId: string, userId: string) {
+export function completeSession(sessionId: string, userId: string, score?: Prisma.Decimal) {
   return prisma.practiceSession.update({
     where: { id: sessionId, userId },
-    data: { status: "completed", endedAt: new Date() },
+    data: { status: "completed", endedAt: new Date(), score },
   });
 }
 
@@ -221,5 +221,23 @@ export function getQuestionVersionsWithSnapshotByIds(questionVersionIds: string[
         },
       },
     },
+  });
+}
+
+export function calculateSessionScore(sessionId: string, frozenQuestionVersionIds: string[]) {
+  if (frozenQuestionVersionIds.length === 0) return new Prisma.Decimal(0);
+  return prisma.$transaction(async (tx) => {
+    // Get all attempts for this session that belong to the frozen pool
+    const attempts = await tx.attempt.findMany({
+      where: {
+        sessionId,
+        questionVersionId: { in: frozenQuestionVersionIds },
+      },
+      select: { marks: true },
+    });
+
+    // Sum up the marks (which already include negative marking from grading)
+    const total = attempts.reduce((sum, attempt) => sum + Number(attempt.marks), 0);
+    return new Prisma.Decimal(total);
   });
 }

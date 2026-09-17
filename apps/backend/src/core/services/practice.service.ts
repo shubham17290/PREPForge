@@ -13,6 +13,7 @@ import {
   findEligiblePublishedQuestions,
   getQuestionVersionsByIds,
   getQuestionVersionsWithSnapshotByIds,
+  calculateSessionScore,
 } from "../repositories/practice.repo";
 import type { PracticeSession, Prisma } from "@prisma/client";
 import { gradePracticeAnswer } from "../grading/grading.service";
@@ -493,7 +494,7 @@ export async function getSessionQuestions(sessionId: string, userId: string): Pr
   return questions;
 }
 
-// completeSession - finalizes the session (sets status to completed, sets endedAt)
+// completeSession - finalizes the session (sets status to completed, sets endedAt, calculates score)
 export async function completeSession(sessionId: string, userId: string): Promise<SessionDTO> {
   const session = await findSessionByIdAndOwner(sessionId, userId);
   if (!session) {
@@ -504,7 +505,31 @@ export async function completeSession(sessionId: string, userId: string): Promis
     throw errors.conflict("SESSION_ALREADY_COMPLETED", "Session is already completed");
   }
 
-  const updated = await completeSessionRepo(sessionId, userId);
+  if (session.status !== STATUS.IN_PROGRESS) {
+    throw errors.conflict("INVALID_SESSION_STATE", `Cannot complete session with status "${session.status}"`);
+  }
+
+  // Parse session config to get frozen pool
+  let parsedConfig: SessionConfig;
+  try {
+    parsedConfig = await parseSessionConfig(session.config);
+  } catch {
+    throw errors.conflict("INVALID_SESSION_CONFIG", "Session configuration is invalid");
+  }
+
+  const frozenPool = parsedConfig.frozenPoolSnapshot as Array<{ questionId: string; questionVersionId: string; questionNumber: number; sequence: number }> | undefined;
+
+  if (!frozenPool || frozenPool.length === 0) {
+    throw errors.conflict("NO_FROZEN_POOL", "Session does not have a frozen question pool");
+  }
+
+  const frozenQuestionVersionIds = frozenPool.map((item) => item.questionVersionId);
+
+  // Calculate aggregate score from graded attempts in the frozen pool
+  const score = await calculateSessionScore(sessionId, frozenQuestionVersionIds);
+
+  // Complete the session with the calculated score (atomic transaction)
+  const updated = await completeSessionRepo(sessionId, userId, score);
   return await toSessionDTO(updated);
 }
 
