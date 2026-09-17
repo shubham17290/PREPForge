@@ -676,10 +676,10 @@ export async function getResult(sessionId: string, userId: string): Promise<Sess
     let options: QuestionResultDTO["options"] = undefined;
     if (questionType.hasOptions && question.options && question.options.length > 0) {
       const correctOptionIds = getCorrectOptionIds(snapshot);
-      const studentSelected = attempt?.selectedAnswers
-        ? (Array.isArray(attempt.selectedAnswers) ? attempt.selectedAnswers : 
+      const studentSelected: string[] = attempt?.selectedAnswers
+        ? (Array.isArray(attempt.selectedAnswers) ? (attempt.selectedAnswers as unknown as string[]) :
           (typeof attempt.selectedAnswers === "object" && attempt.selectedAnswers !== null 
-            ? ((attempt.selectedAnswers as Record<string, unknown>).values as string[]) ?? [] : []))
+            ? ((attempt.selectedAnswers as Record<string, unknown>).values as unknown as string[]) ?? [] : []))
         : [];
       options = question.options.map((opt) => ({
         id: opt.id,
@@ -695,9 +695,9 @@ export async function getResult(sessionId: string, userId: string): Promise<Sess
     if (attempt?.selectedAnswers) {
       const raw = attempt.selectedAnswers;
       const state = raw !== null && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
-      const values = state.values as string[] | undefined;
+      const values = state.values as unknown as string[] | undefined;
       studentAnswer = {
-        selectedAnswers: Array.isArray(raw) ? raw : (values ?? []),
+        selectedAnswers: Array.isArray(raw) ? (raw as unknown as string[]) : (values ?? []),
         numericAnswer: (state.numericAnswer as number | null) ?? null,
       };
     }

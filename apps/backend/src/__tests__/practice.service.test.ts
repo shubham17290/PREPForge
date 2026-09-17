@@ -629,7 +629,7 @@ describe("Practice service", () => {
 
   it("does not create duplicate attempts", async () => {
     let sessionStatus = "in_progress";
-    findSessionMock.mockImplementation(async () => makeSessionWithFrozenPool({ status: sessionStatus }));
+    findSessionMock.mockImplementation(() => Promise.resolve(makeSessionWithFrozenPool({ status: sessionStatus })) as unknown as ReturnType<typeof findSessionByIdAndOwner>);
     vi.mocked(calculateSessionScore).mockResolvedValue(new Prisma.Decimal(3));
 
     // Complete first time
