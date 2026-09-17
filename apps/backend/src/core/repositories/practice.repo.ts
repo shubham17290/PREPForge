@@ -28,6 +28,8 @@ export function parseSessionConfig(config: unknown): SessionConfig {
     filters: value.filters ?? {},
     question_count: value.question_count ?? 0,
     pool: value.pool ?? null,
+    frozenPoolSnapshot: value.frozenPoolSnapshot,
+    selectionMetadata: value.selectionMetadata,
   };
 }
 
@@ -70,6 +72,52 @@ export function completeSession(sessionId: string, userId: string) {
   return prisma.practiceSession.update({
     where: { id: sessionId, userId },
     data: { status: "completed", endedAt: new Date() },
+  });
+}
+
+export function findPracticeModeByCode(code: string) {
+  return prisma.practiceMode.findUnique({ where: { code } });
+}
+
+export function findPublishedQuestionVersion(questionId: string) {
+  return prisma.questionVersion.findFirst({
+    where: {
+      questionId,
+      question: { status: "published" },
+    },
+    orderBy: { version: "desc" },
+  });
+}
+
+export function findEligiblePublishedQuestions(filters: {
+  subject_id?: string;
+  topic_id?: string;
+  year?: number;
+  difficulty?: string;
+  question_types?: string[];
+  limit: number;
+}) {
+  return prisma.question.findMany({
+    where: {
+      status: "published",
+      ...(filters.subject_id ? { subjectId: filters.subject_id } : {}),
+      ...(filters.topic_id ? { topicId: filters.topic_id } : {}),
+      ...(filters.year ? { gateYear: filters.year } : {}),
+      ...(filters.difficulty ? { difficulty: filters.difficulty } : {}),
+      ...(filters.question_types && filters.question_types.length > 0
+        ? { questionType: { code: { in: filters.question_types } } }
+        : {}),
+    },
+    include: {
+      versions: {
+        where: { question: { status: "published" } },
+        orderBy: { version: "desc" },
+        take: 1,
+      },
+      questionType: true,
+    },
+    orderBy: { id: "asc" },
+    take: filters.limit,
   });
 }
 

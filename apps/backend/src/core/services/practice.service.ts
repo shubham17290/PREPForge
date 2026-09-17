@@ -9,16 +9,17 @@ import {
   SessionConfig,
   upsertAnswer,
   completeSession as completeSessionRepo,
+  findPracticeModeByCode,
+  findEligiblePublishedQuestions,
 } from "../repositories/practice.repo";
 import type { PracticeSession, Prisma } from "@prisma/client";
-import { updateSessionStatus } from "../repositories/practice.repo";
 
 
 const STATUS = {
-  PENDING: "pending",
-  ACTIVE: "active",
+  IN_PROGRESS: "in_progress",
   SUBMITTED: "submitted",
   COMPLETED: "completed",
+  ABANDONED: "abandoned",
 } as const;
 
 export interface CreateSessionInput {
@@ -136,7 +137,6 @@ export async function createPracticeSession(input: CreateSessionInput): Promise<
     config,
     timed: input.timed ?? false,
     totalQuestions: input.totalQuestions,
-    status: STATUS.PENDING,
     frozenPoolSnapshot: input.frozenPoolSnapshot,
     selectionMetadata: input.selectionMetadata,
   });
@@ -145,17 +145,64 @@ export async function createPracticeSession(input: CreateSessionInput): Promise<
 
 // Route-compatible createSession
 export async function createSessionRoute(userId: string, input: RouteCreateSessionInput): Promise<SessionDTO> {
+  // Validate PracticeMode exists
+  const mode = await findPracticeModeByCode(input.mode);
+  if (!mode) {
+    throw errors.validation([{ field: "mode", code: "INVALID_PRACTICE_MODE", message: `Practice mode "${input.mode}" does not exist.` }]);
+  }
+
+  const questionCount = input.questionCount ?? 20;
+
+  // Select eligible published questions based on filters
+  const eligibleQuestions = await findEligiblePublishedQuestions({
+    subject_id: input.filters.subject_id as string | undefined,
+    topic_id: input.filters.topic_id as string | undefined,
+    year: input.filters.year as number | undefined,
+    difficulty: input.filters.difficulty as string | undefined,
+    question_types: input.filters.question_types as string[] | undefined,
+    limit: questionCount,
+  });
+
+  if (eligibleQuestions.length < questionCount) {
+    throw errors.noMatchingQuestions();
+  }
+
+  // Build frozen pool snapshot
+  const frozenPool = eligibleQuestions.map((q, index) => ({
+    questionId: q.id,
+    questionVersionId: q.versions[0]?.id ?? null,
+    questionNumber: index + 1,
+    sequence: index + 1,
+  }));
+
+  // Filter out questions without a published version (should not happen due to query, but safety)
+  const validPool = frozenPool.filter((item) => item.questionVersionId !== null);
+
+  if (validPool.length < questionCount) {
+    throw errors.noMatchingQuestions();
+  }
+
+  const config = {
+    mode: input.mode,
+    filters: input.filters,
+    question_count: questionCount,
+    pool: validPool.map((item) => item.questionId),
+  };
+
+  const selectionMetadata = {
+    poolSnapshot: validPool,
+    shuffleSeed: Math.floor(Math.random() * 1_000_000),
+    createdAt: new Date().toISOString(),
+  };
+
   return createPracticeSession({
     userId,
-    modeId: input.mode,
-    config: {
-      mode: input.mode,
-      filters: input.filters,
-      question_count: input.questionCount ?? 20,
-      pool: null,
-    },
+    modeId: mode.id,
+    config,
     timed: input.timed ?? false,
-    totalQuestions: input.questionCount ?? 20,
+    totalQuestions: questionCount,
+    frozenPoolSnapshot: validPool,
+    selectionMetadata,
   });
 }
 
@@ -174,17 +221,13 @@ export async function activatePracticeSession(sessionId: string, userId: string)
   }
 
   const currentStatus = session.status;
-  if (currentStatus === STATUS.PENDING) {
-    const updated = await updateSessionStatus(sessionId, STATUS.ACTIVE, userId);
-    return await toSessionDTO(updated);
+  if (currentStatus === STATUS.IN_PROGRESS) {
+    // Session is already in the active state (in_progress)
+    return await toSessionDTO(session);
   }
 
-  if (currentStatus === STATUS.ACTIVE) {
-    throw errors.conflict("INVALID_SESSION_STATE", "Session is already active");
-  }
-
-  if (currentStatus === STATUS.SUBMITTED || currentStatus === STATUS.COMPLETED) {
-    throw errors.conflict("SUBMITTED_SESSION_IMMUTABLE", "Cannot activate a submitted session");
+  if (currentStatus === STATUS.SUBMITTED || currentStatus === STATUS.COMPLETED || currentStatus === STATUS.ABANDONED) {
+    throw errors.conflict("SUBMITTED_SESSION_IMMUTABLE", "Cannot activate a submitted, completed, or abandoned session");
   }
 
   throw errors.conflict("INVALID_SESSION_STATE", `Cannot activate from status '${currentStatus}'`);
@@ -196,11 +239,11 @@ export async function savePracticeAnswer(input: SaveAnswerInput): Promise<void> 
     throw errors.notFound("SESSION_NOT_FOUND", `Session ${input.sessionId} not found or not owned`);
   }
 
-  if (session.status === STATUS.SUBMITTED || session.status === STATUS.COMPLETED) {
-    throw errors.conflict("SUBMITTED_SESSION_IMMUTABLE", "Cannot modify answers for a submitted session");
+  if (session.status === STATUS.SUBMITTED || session.status === STATUS.COMPLETED || session.status === STATUS.ABANDONED) {
+    throw errors.conflict("SUBMITTED_SESSION_IMMUTABLE", "Cannot modify answers for a submitted, completed, or abandoned session");
   }
 
-  if (session.status !== STATUS.ACTIVE) {
+  if (session.status !== STATUS.IN_PROGRESS) {
     throw errors.conflict("INVALID_SESSION_STATE", `Cannot save answer in status "${session.status}"`);
   }
 
@@ -227,13 +270,37 @@ export async function recordAttemptRoute(sessionId: string, userId: string, inpu
     throw errors.notFound("SESSION_NOT_FOUND", `Session ${sessionId} not found or not owned`);
   }
 
-  if (session.status === STATUS.SUBMITTED || session.status === STATUS.COMPLETED) {
-    throw errors.conflict("SUBMITTED_SESSION_IMMUTABLE", "Cannot modify answers for a submitted session");
+  if (session.status === STATUS.SUBMITTED || session.status === STATUS.COMPLETED || session.status === STATUS.ABANDONED) {
+    throw errors.conflict("SUBMITTED_SESSION_IMMUTABLE", "Cannot modify answers for a submitted, completed, or abandoned session");
   }
 
-  if (session.status !== STATUS.ACTIVE) {
+  if (session.status !== STATUS.IN_PROGRESS) {
     throw errors.conflict("INVALID_SESSION_STATE", `Cannot save answer in status "${session.status}"`);
   }
+
+  // Parse session config to get frozen pool
+  let parsedConfig: SessionConfig;
+  try {
+    parsedConfig = await parseSessionConfig(session.config);
+  } catch {
+    throw errors.conflict("INVALID_SESSION_CONFIG", "Session configuration is invalid");
+  }
+
+  const frozenPool = parsedConfig.frozenPoolSnapshot as Array<{ questionId: string; questionVersionId: string; questionNumber: number; sequence: number }> | undefined;
+
+  if (!frozenPool || frozenPool.length === 0) {
+    throw errors.conflict("NO_FROZEN_POOL", "Session does not have a frozen question pool");
+  }
+
+  // Find the question in the frozen pool
+  const poolEntry = frozenPool.find((item) => item.questionId === input.question_id);
+  if (!poolEntry) {
+    throw errors.notFound("QUESTION_NOT_IN_POOL", `Question ${input.question_id} is not part of this session's frozen pool`);
+  }
+
+  const questionVersionId = poolEntry.questionVersionId;
+  const questionNumber = poolEntry.questionNumber;
+  const sequence = poolEntry.sequence;
 
   // Extract answer based on type - for now we just persist, no grading
   const answer = input.answer;
@@ -254,25 +321,25 @@ export async function recordAttemptRoute(sessionId: string, userId: string, inpu
     sessionId,
     userId,
     questionId: input.question_id,
-    questionVersionId: input.question_id, // routes use question_id as version id for now
-    sequence: 0,
+    questionVersionId,
+    sequence,
+    questionNumber,
     answerState: "answered",
     markedForReview: false,
     selectedAnswers,
     numericAnswer,
   };
 
-  // We need to get the created/updated attempt back - upsertAnswer doesn't return it currently
-  // For compatibility, we'll call upsertAnswer and then fetch the attempt
-  await upsertAnswer(upsertInput);
+  // Persist and get the actual attempt back
+  const attempt = await upsertAnswer(upsertInput);
 
-  // Return a compatible response (created=true for now)
+  // Return real attempt data
   return {
     created: true,
     payload: {
-      attempt_id: "temp",
+      attempt_id: attempt.id,
       question_id: input.question_id,
-      is_correct: false,
+      is_correct: false, // no grading in this phase
       marks: 0,
       time_taken_seconds: input.time_taken_seconds,
     },
