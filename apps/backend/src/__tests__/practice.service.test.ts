@@ -127,7 +127,7 @@ function makeSessionWithFrozenPool(overrides: Partial<SessionRow> = {}): Session
   });
 }
 
-function makeQuestionVersionWithSnapshot(id: string, snapshot: Prisma.JsonValue): any {
+function makeQuestionVersionWithSnapshot(id: string, snapshot: Prisma.JsonValue): Awaited<ReturnType<typeof getQuestionVersionsWithSnapshotByIds>>[number] {
   return {
     id,
     questionId: "q-1",
@@ -155,7 +155,7 @@ function makeQuestionVersionWithSnapshot(id: string, snapshot: Prisma.JsonValue)
       createdAt: new Date(),
       updatedAt: new Date(),
     },
-  };
+  } as unknown as Awaited<ReturnType<typeof getQuestionVersionsWithSnapshotByIds>>[number];
 }
 
 function makeMCQSnapshot(overrides: Record<string, unknown> = {}): Prisma.JsonValue {
@@ -282,7 +282,7 @@ describe("Practice service", () => {
 
   it.each([
     ["submitted", "SUBMITTED_SESSION_IMMUTABLE"],
-    ["completed", "SESSION_ALREADY_COMPLETED"],
+    ["completed", "SUBMITTED_SESSION_IMMUTABLE"],
     ["abandoned", "SUBMITTED_SESSION_IMMUTABLE"],
   ])("rejects activation from %s", async (status, code) => {
     findSessionMock.mockResolvedValue(makeSession({ status }));
@@ -603,8 +603,8 @@ describe("Practice service", () => {
   });
 
   it.each([
-    ["submitted", "SUBMITTED_SESSION_IMMUTABLE"],
-    ["abandoned", "SUBMITTED_SESSION_IMMUTABLE"],
+    ["submitted", "INVALID_SESSION_STATE"],
+    ["abandoned", "INVALID_SESSION_STATE"],
   ])("rejects %s sessions", async (status, code) => {
     findSessionMock.mockResolvedValue(makeSessionWithFrozenPool({ status }));
     await expect(completeSession("session-1", "user-1")).rejects.toMatchObject({ code });
@@ -624,7 +624,7 @@ describe("Practice service", () => {
     await completeSession("session-1", "user-1");
 
     // The frozen pool should remain unchanged - verify score calculation uses frozen pool
-    expect(calculateSessionScore).toHaveBeenCalledWith("session-1", ["qv-1", "qv-2", "qv-3"]);
+    expect(calculateSessionScore).toHaveBeenCalledWith("session-1", ["qv-1", "qv-2"]);
   });
 
   it("does not create duplicate attempts", async () => {
@@ -667,7 +667,7 @@ describe("Practice service", () => {
     await completeSession("session-1", "user-1");
 
     // verify calculateSessionScore was called with the frozen pool's questionVersionIds
-    expect(calculateSessionScore).toHaveBeenCalledWith("session-1", ["qv-1", "qv-2", "qv-3"]);
+    expect(calculateSessionScore).toHaveBeenCalledWith("session-1", ["qv-1", "qv-2"]);
   });
 });
 

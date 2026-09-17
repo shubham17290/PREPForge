@@ -98,7 +98,7 @@ describe("Practice repository compatibility", () => {
     db.attempt.findMany.mockResolvedValue([]);
     expect(await listAnswersForSession("session-1")).toEqual([]);
     expect(db.attempt.findMany).toHaveBeenCalledWith({ where: { sessionId: "session-1" },
-      orderBy: { sequence: "asc" }, select: { questionVersionId: true, sequence: true, selectedAnswers: true },
+      orderBy: { sequence: "asc" }, select: { questionVersionId: true, sequence: true, selectedAnswers: true, isCorrect: true, marks: true },
     });
   });
 
