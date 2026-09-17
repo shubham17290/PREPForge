@@ -183,7 +183,13 @@ export function listAnswersForSession(sessionId: string) {
   return prisma.attempt.findMany({
     where: { sessionId },
     orderBy: { sequence: "asc" },
-    select: { questionVersionId: true, sequence: true, selectedAnswers: true },
+    select: {
+      questionVersionId: true,
+      sequence: true,
+      selectedAnswers: true,
+      isCorrect: true,
+      marks: true,
+    },
   });
 }
 
@@ -238,6 +244,17 @@ export function calculateSessionScore(sessionId: string, frozenQuestionVersionId
 
     // Sum up the marks (which already include negative marking from grading)
     const total = attempts.reduce((sum, attempt) => sum + Number(attempt.marks), 0);
+    return new Prisma.Decimal(total);
+  });
+}
+
+export function getMaxPossibleMarks(frozenQuestionVersionIds: string[]) {
+  if (frozenQuestionVersionIds.length === 0) return new Prisma.Decimal(0);
+  return prisma.questionVersion.findMany({
+    where: { id: { in: frozenQuestionVersionIds } },
+    select: { question: { select: { marks: true } } },
+  }).then(versions => {
+    const total = versions.reduce((sum, v) => sum + Number(v.question.marks), 0);
     return new Prisma.Decimal(total);
   });
 }

@@ -14,6 +14,7 @@ import {
   getQuestionVersionsByIds,
   getQuestionVersionsWithSnapshotByIds,
   calculateSessionScore,
+  getMaxPossibleMarks,
 } from "../repositories/practice.repo";
 import type { PracticeSession, Prisma } from "@prisma/client";
 import { gradePracticeAnswer } from "../grading/grading.service";
@@ -400,6 +401,32 @@ function getQuestionType(snapshot: Record<string, unknown>): { code: string; sup
   };
 }
 
+function getCorrectOptionIds(snapshot: Record<string, unknown>): string[] {
+  const options = getSnapshotValue<Record<string, unknown>[]>(snapshot, "options");
+  if (!options) return [];
+  return options
+    .filter((opt) => opt.isCorrect === true)
+    .map((opt) => String(opt.id));
+}
+
+function getNumericAnswers(snapshot: Record<string, unknown>): Array<{
+  value: number;
+  toleranceAbs: number;
+  toleranceRel: number;
+  unit?: string;
+  precision?: number;
+}> {
+  const numericAnswers = getSnapshotValue<Record<string, unknown>[]>(snapshot, "numericAnswers");
+  if (!numericAnswers) return [];
+  return numericAnswers.map((na) => ({
+    value: Number(na.numericValue),
+    toleranceAbs: Number(na.toleranceAbs ?? 0),
+    toleranceRel: Number(na.toleranceRel ?? 0),
+    unit: na.unit ? String(na.unit) : undefined,
+    precision: na.precision ? Number(na.precision) : undefined,
+  }));
+}
+
 export async function getPracticeSessionAnswers(sessionId: string, userId: string) {
   const session = await findSessionByIdAndOwner(sessionId, userId);
   if (!session) {
@@ -533,8 +560,53 @@ export async function completeSession(sessionId: string, userId: string): Promis
   return await toSessionDTO(updated);
 }
 
-// getResult - returns session result with answers (no grading)
-export async function getResult(sessionId: string, userId: string): Promise<SessionDTO & { answers: Awaited<ReturnType<typeof getPracticeSessionAnswers>> }> {
+// getResult - returns comprehensive session result with detailed per-question results
+export interface QuestionResultDTO {
+  questionId: string;
+  questionVersionId: string;
+  questionNumber: number;
+  sequence: number;
+  questionType: string;
+  marks: number;
+  difficulty: string;
+  attempted: boolean;
+  correct: boolean;
+  marksAwarded: number;
+  negativeMarksApplied: number;
+  studentAnswer: {
+    selectedAnswers?: string[];
+    numericAnswer?: number | null;
+  };
+  // For MCQ/MSQ: options with student selection state (without exposing correct answers)
+  options?: Array<{
+    id: string;
+    body: string;
+    sortOrder: number;
+    selected: boolean;
+    // Only show correct/incorrect if explicitly answered
+    isCorrect?: boolean;
+  }>;
+  // For NAT: show the correct value only if answered (optional, per policy)
+  correctValue?: number;
+}
+
+export interface SessionResultDTO {
+  sessionId: string;
+  sessionStatus: string;
+  totalQuestions: number;
+  attemptedCount: number;
+  unansweredCount: number;
+  correctCount: number;
+  incorrectCount: number;
+  totalMarksAwarded: number;
+  maxPossibleMarks: number;
+  finalScore: number;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  questions: QuestionResultDTO[];
+}
+
+export async function getResult(sessionId: string, userId: string): Promise<SessionResultDTO> {
   const session = await findSessionByIdAndOwner(sessionId, userId);
   if (!session) {
     throw errors.notFound("SESSION_NOT_FOUND", `Session ${sessionId} not found or not owned`);
@@ -544,10 +616,135 @@ export async function getResult(sessionId: string, userId: string): Promise<Sess
     throw errors.conflict("RESULT_NOT_READY", "Session not completed yet");
   }
 
-  const sessionDTO = await toSessionDTO(session);
-  const answers = await getPracticeSessionAnswers(sessionId, userId);
+  // Parse session config to get frozen pool
+  let parsedConfig: SessionConfig;
+  try {
+    parsedConfig = await parseSessionConfig(session.config);
+  } catch {
+    throw errors.conflict("INVALID_SESSION_CONFIG", "Session configuration is invalid");
+  }
 
-  return { ...sessionDTO, answers };
+  const frozenPool = parsedConfig.frozenPoolSnapshot as Array<{ questionId: string; questionVersionId: string; questionNumber: number; sequence: number }> | undefined;
+
+  if (!frozenPool || frozenPool.length === 0) {
+    throw errors.conflict("NO_FROZEN_POOL", "Session does not have a frozen question pool");
+  }
+
+  const frozenQuestionVersionIds = frozenPool.map((item) => item.questionVersionId);
+
+  // Fetch all QuestionVersion snapshots for the frozen pool (with correct answers for grading)
+  const questionVersions = await getQuestionVersionsWithSnapshotByIds(frozenQuestionVersionIds);
+  const versionMap = new Map(questionVersions.map((qv) => [qv.id, qv]));
+
+  // Get all attempts for this session
+  const attempts = await listAnswersForSession(sessionId);
+  const attemptMap = new Map(attempts.map((a) => [a.questionVersionId, a]));
+
+  // Calculate max possible marks from frozen pool
+  const maxPossibleMarks = await getMaxPossibleMarks(frozenQuestionVersionIds);
+
+  // Build per-question results
+  const questions: QuestionResultDTO[] = [];
+  let attemptedCount = 0;
+  let correctCount = 0;
+  let incorrectCount = 0;
+  let totalMarksAwarded = 0;
+
+  for (const poolEntry of frozenPool) {
+    const qv = versionMap.get(poolEntry.questionVersionId);
+    if (!qv) continue;
+
+    const question = qv.question;
+    const questionType = question.questionType;
+    const attempt = attemptMap.get(poolEntry.questionVersionId);
+    const snapshot = qv.snapshot as Record<string, unknown>;
+    const marks = Number(getSnapshotValue(snapshot, "marks") ?? question.marks);
+
+    const attempted = !!attempt;
+    if (attempted) attemptedCount++;
+
+    const isCorrect = attempt?.isCorrect ?? false;
+    if (isCorrect) correctCount++;
+    else if (attempted) incorrectCount++;
+
+    const marksAwarded = Number(attempt?.marks ?? 0);
+    const attemptSelectedAnswers = attempt?.selectedAnswers as Record<string, unknown> | undefined;
+    const negativeMarksApplied = Number(attemptSelectedAnswers?.__negativeMarksApplied ?? 0);
+    if (attempted) totalMarksAwarded += marksAwarded;
+
+    // Build options for MCQ/MSQ
+    let options: QuestionResultDTO["options"] = undefined;
+    if (questionType.hasOptions && question.options && question.options.length > 0) {
+      const correctOptionIds = getCorrectOptionIds(snapshot);
+      const studentSelected = attempt?.selectedAnswers
+        ? (Array.isArray(attempt.selectedAnswers) ? attempt.selectedAnswers : 
+          (typeof attempt.selectedAnswers === "object" && attempt.selectedAnswers !== null 
+            ? ((attempt.selectedAnswers as Record<string, unknown>).values as string[]) ?? [] : []))
+        : [];
+      options = question.options.map((opt) => ({
+        id: opt.id,
+        body: opt.body,
+        sortOrder: opt.sortOrder,
+        selected: studentSelected.includes(opt.id),
+        isCorrect: correctOptionIds.includes(opt.id),
+      }));
+    }
+
+    // Get student answer
+    let studentAnswer: QuestionResultDTO["studentAnswer"] = { selectedAnswers: [], numericAnswer: null };
+    if (attempt?.selectedAnswers) {
+      const raw = attempt.selectedAnswers;
+      const state = raw !== null && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+      studentAnswer = {
+        selectedAnswers: Array.isArray(raw) ? raw : ((state.values as string[]) ?? []),
+        numericAnswer: (state.numericAnswer as number | null) ?? null,
+      };
+    }
+
+    // Get correct value for NAT (only expose if policy allows)
+    let correctValue: number | undefined = undefined;
+    if (questionType.code === "nat") {
+      const numericAnswers = getNumericAnswers(snapshot);
+      if (numericAnswers.length > 0) {
+        correctValue = numericAnswers[0].value;
+      }
+    }
+
+    questions.push({
+      questionId: poolEntry.questionId,
+      questionVersionId: poolEntry.questionVersionId,
+      questionNumber: poolEntry.questionNumber,
+      sequence: poolEntry.sequence,
+      questionType: questionType.code,
+      marks,
+      difficulty: question.difficulty,
+      attempted,
+      correct: isCorrect,
+      marksAwarded,
+      negativeMarksApplied,
+      studentAnswer,
+      options,
+      correctValue,
+    });
+  }
+
+  const unansweredCount = frozenPool.length - attemptedCount;
+
+  return {
+    sessionId: session.id,
+    sessionStatus: session.status,
+    totalQuestions: frozenPool.length,
+    attemptedCount,
+    unansweredCount,
+    correctCount,
+    incorrectCount,
+    totalMarksAwarded,
+    maxPossibleMarks: Number(maxPossibleMarks),
+    finalScore: Number(session.score ?? 0),
+    startedAt: session.startedAt,
+    completedAt: session.endedAt,
+    questions,
+  };
 }
 
 // Compatibility aliases for routes

@@ -20,20 +20,25 @@ vi.mock("../core/repositories/practice.repo", () => ({
   getQuestionVersionsByIds: vi.fn().mockResolvedValue([]),
   getQuestionVersionsWithSnapshotByIds: vi.fn().mockResolvedValue([]),
   calculateSessionScore: vi.fn().mockResolvedValue(new Prisma.Decimal(0)),
-  completeSession: vi.fn().mockImplementation(async (sessionId: string, userId: string, score?: Prisma.Decimal) => ({
-    id: sessionId,
-    userId,
-    modeId: "mode-1",
-    config: { mode: "topic", filters: {}, question_count: 3, pool: null },
-    timed: false,
-    totalQuestions: 3,
-    status: "completed",
-    startedAt: new Date("2026-01-01T00:00:00Z"),
-    endedAt: new Date(),
-    abandonedAt: null,
-    score: score || new Prisma.Decimal(0),
+  completeSession: vi.fn().mockImplementation(async (sessionId: string, userId: string, score?: Prisma.Decimal) => {
+    return {
+      id: sessionId,
+      userId,
+      user: { id: userId, email: "test@example.com", fullName: "Test User", roleId: "role-1", status: "active", createdAt: new Date(), updatedAt: new Date(), deletedAt: null, targetSubjectId: null, emailVerifiedAt: null },
+      mode: { id: "mode-1", code: "topic", name: "Topic", isActive: true, createdAt: new Date(), updatedAt: new Date() },
+      modeId: "mode-1",
+      config: { mode: "topic", filters: {}, question_count: 3, pool: null },
+      timed: false,
+      totalQuestions: 3,
+      status: "completed",
+      startedAt: new Date("2026-01-01T00:00:00Z"),
+      endedAt: new Date(),
+      abandonedAt: null,
+      score: score || new Prisma.Decimal(0),
+      attempts: [],
+    };
   })),
-}));
+});
 
 import {
   activatePracticeSession,
@@ -229,8 +234,7 @@ describe("Practice service", () => {
       sessionId: "session-1", userId: "user-1", questionId: "q-1", questionVersionId: "qv-1",
       sequence: 1, questionNumber: 1, answerState: "answered", markedForReview: true,
       selectedAnswers: ["A"], numericAnswer: undefined,
-    });
-  });
+});
 
   it.each([
     ["submitted", "SUBMITTED_SESSION_IMMUTABLE"],
@@ -253,7 +257,7 @@ describe("Practice service", () => {
     listAnswersMock.mockResolvedValue([{ questionVersionId: "qv-1", sequence: 1, selectedAnswers: {
       values: ["A"], numericAnswer: null, __answerState: "answered", __markedForReview: true,
       __negativeMarksApplied: 1, correctOptions: ["B"], numericAnswerKey: 42, score: 10, correct: false,
-    } }]);
+    }, isCorrect: false, marks: new Prisma.Decimal(0) } ]);
     expect(await getPracticeSessionAnswers("session-1", "user-1")).toEqual([{
       questionVersionId: "qv-1", questionNumber: 1, selectedAnswers: ["A"], numericAnswer: null,
       answerState: "answered", markedForReview: true,
@@ -944,6 +948,4 @@ it("recordAttemptRoute uses frozen pool and returns real attempt ID", async () =
 
       // verify calculateSessionScore was called with the frozen pool's questionVersionIds
       expect(calculateSessionScore).toHaveBeenCalledWith("session-1", ["qv-1", "qv-2", "qv-3"]);
-    });
-  });
 });
