@@ -205,3 +205,21 @@ export function getQuestionVersionsByIds(questionVersionIds: string[]) {
     },
   });
 }
+
+export function getQuestionVersionsWithSnapshotByIds(questionVersionIds: string[]) {
+  if (questionVersionIds.length === 0) return [];
+  return prisma.questionVersion.findMany({
+    where: { id: { in: questionVersionIds } },
+    include: {
+      question: {
+        include: {
+          options: {
+            orderBy: { sortOrder: "asc" },
+          },
+          numericAnswers: true,
+          questionType: true,
+        },
+      },
+    },
+  });
+}

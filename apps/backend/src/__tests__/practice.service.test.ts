@@ -17,6 +17,7 @@ vi.mock("../core/repositories/practice.repo", () => ({
   findPublishedQuestionVersion: vi.fn(),
   findEligiblePublishedQuestions: vi.fn().mockResolvedValue([]),
   getQuestionVersionsByIds: vi.fn().mockResolvedValue([]),
+  getQuestionVersionsWithSnapshotByIds: vi.fn().mockResolvedValue([]),
 }));
 
 import {
@@ -39,6 +40,7 @@ import {
   findPublishedQuestionVersion,
   findEligiblePublishedQuestions,
   getQuestionVersionsByIds,
+  getQuestionVersionsWithSnapshotByIds,
 } from "../core/repositories/practice.repo";
 import type { QuestionVersion } from "@prisma/client";
 import { Prisma } from "@prisma/client";
@@ -54,6 +56,7 @@ const findPracticeModeMock = vi.mocked(findPracticeModeByCode);
 const findPublishedQuestionVersionMock = vi.mocked(findPublishedQuestionVersion);
 const findEligiblePublishedQuestionsMock = vi.mocked(findEligiblePublishedQuestions);
 const getQuestionVersionsByIdsMock = vi.mocked(getQuestionVersionsByIds);
+const getQuestionVersionsWithSnapshotByIdsMock = vi.mocked(getQuestionVersionsWithSnapshotByIds);
 
 function makeSession(overrides: Partial<SessionRow> = {}): SessionRow {
   return {
@@ -131,6 +134,7 @@ beforeEach(() => {
   findPracticeModeMock.mockResolvedValue({ id: "mode-1", code: "topic", name: "Topic" });
   findPublishedQuestionVersionMock.mockResolvedValue(makeQuestionVersion());
   getQuestionVersionsByIdsMock.mockResolvedValue([]);
+  getQuestionVersionsWithSnapshotByIdsMock.mockResolvedValue([]);
 });
 
 describe("Practice service", () => {
@@ -340,8 +344,83 @@ describe("Practice service", () => {
     expect(createSessionMock).not.toHaveBeenCalled();
   });
 
-  it("recordAttemptRoute uses frozen pool and returns real attempt ID", async () => {
+  function makeMCQSnapshot(overrides: Record<string, unknown> = {}): Prisma.JsonValue {
+  return {
+    questionType: { code: "mcq", hasOptions: true, hasNumeric: false, supportsMultiple: false },
+    options: [
+      { id: "opt-1", body: "3", sortOrder: 1, isCorrect: false, questionId: "q-1" },
+      { id: "opt-2", body: "4", sortOrder: 2, isCorrect: true, questionId: "q-1" },
+      { id: "opt-3", body: "5", sortOrder: 3, isCorrect: false, questionId: "q-1" },
+    ],
+    marks: 1,
+    negativeMarks: 0.33,
+    ...overrides,
+  };
+}
+
+function makeMSQSnapshot(overrides: Record<string, unknown> = {}): Prisma.JsonValue {
+  return {
+    questionType: { code: "msq", hasOptions: true, hasNumeric: false, supportsMultiple: true },
+    options: [
+      { id: "opt-1", body: "Option 1", sortOrder: 1, isCorrect: true, questionId: "q-1" },
+      { id: "opt-2", body: "Option 2", sortOrder: 2, isCorrect: true, questionId: "q-1" },
+      { id: "opt-3", body: "Option 3", sortOrder: 3, isCorrect: false, questionId: "q-1" },
+    ],
+    marks: 2,
+    negativeMarks: 0.5,
+    ...overrides,
+  };
+}
+
+function makeNATSnapshot(overrides: Record<string, unknown> = {}): Prisma.JsonValue {
+  return {
+    questionType: { code: "nat", hasOptions: false, hasNumeric: true, supportsMultiple: false },
+    numericAnswers: [
+      { numericValue: 42, toleranceAbs: 0.1, toleranceRel: 0, unit: "", precision: 2 },
+    ],
+    marks: 2,
+    negativeMarks: 0.5,
+    ...overrides,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function makeQuestionVersionWithSnapshot(id: string, snapshot: Prisma.JsonValue): any {
+  return {
+    id,
+    questionId: "q-1",
+    version: 1,
+    snapshot,
+    reason: null,
+    createdById: "user-1",
+    createdAt: new Date(),
+    question: {
+      id: "q-1",
+      questionTypeId: "qt-1",
+      subjectId: "subj-1",
+      topicId: "topic-1",
+      body: "Test question",
+      explanation: "Test explanation",
+      marks: 1,
+      negativeMarks: 0.33,
+      difficulty: "easy",
+      status: "published",
+      version: 1,
+      gateYear: 2024,
+      sourceId: null,
+      createdById: "user-1",
+      reviewedById: "user-1",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  };
+}
+
+it("recordAttemptRoute uses frozen pool and returns real attempt ID", async () => {
     findSessionMock.mockResolvedValue(makeSessionWithFrozenPool());
+    getQuestionVersionsWithSnapshotByIdsMock.mockResolvedValue([
+      makeQuestionVersionWithSnapshot("qv-1", makeMCQSnapshot()),
+    ]);
     upsertAnswerMock.mockResolvedValue({ id: "attempt-real-1", sessionId: "session-1", userId: "user-1", questionVersionId: "qv-1", sequence: 1, selectedAnswers: {}, isCorrect: false, marks: new Prisma.Decimal(0), timeTakenSeconds: 30, answeredAt: new Date(), responseVersion: 1 });
 
     const result = await recordAttemptRoute("session-1", "user-1", {
@@ -358,10 +437,16 @@ describe("Practice service", () => {
     expect(result.payload.attempt_id).toBe("attempt-real-1");
     expect(result.payload.question_id).toBe("q-1");
     expect(result.payload.time_taken_seconds).toBe(30);
+    // Since option A is incorrect (option B is correct), expect incorrect result
+    expect(result.payload.is_correct).toBe(false);
+    expect(result.payload.marks).toBe(0);
   });
 
   it("recordAttemptRoute rejects question not in frozen pool", async () => {
     findSessionMock.mockResolvedValue(makeSessionWithFrozenPool());
+    getQuestionVersionsWithSnapshotByIdsMock.mockResolvedValue([
+      makeQuestionVersionWithSnapshot("qv-1", makeMCQSnapshot()),
+    ]);
 
     await expect(recordAttemptRoute("session-1", "user-1", {
       question_id: "q-999",
@@ -399,6 +484,9 @@ describe("Practice service", () => {
   // Additional recordAttemptRoute tests for Phase 12G-T13
   it("recordAttemptRoute accepts valid MSQ answer (option_ids array)", async () => {
     findSessionMock.mockResolvedValue(makeSessionWithFrozenPool());
+    getQuestionVersionsWithSnapshotByIdsMock.mockResolvedValue([
+      makeQuestionVersionWithSnapshot("qv-1", makeMSQSnapshot()),
+    ]);
     upsertAnswerMock.mockResolvedValue({ id: "attempt-real-1", sessionId: "session-1", userId: "user-1", questionVersionId: "qv-1", sequence: 1, selectedAnswers: {}, isCorrect: false, marks: new Prisma.Decimal(0), timeTakenSeconds: 45, answeredAt: new Date(), responseVersion: 1 });
 
     const result = await recordAttemptRoute("session-1", "user-1", {
@@ -415,12 +503,16 @@ describe("Practice service", () => {
     expect(result.payload.attempt_id).toBe("attempt-real-1");
     expect(result.payload.question_id).toBe("q-1");
     expect(result.payload.time_taken_seconds).toBe(45);
+    // Since options A and C don't match exactly A and B, expect incorrect
     expect(result.payload.is_correct).toBe(false);
     expect(result.payload.marks).toBe(0);
   });
 
   it("recordAttemptRoute accepts valid NAT answer (numeric value)", async () => {
     findSessionMock.mockResolvedValue(makeSessionWithFrozenPool());
+    getQuestionVersionsWithSnapshotByIdsMock.mockResolvedValue([
+      makeQuestionVersionWithSnapshot("qv-1", makeNATSnapshot()),
+    ]);
     upsertAnswerMock.mockResolvedValue({ id: "attempt-real-1", sessionId: "session-1", userId: "user-1", questionVersionId: "qv-1", sequence: 1, selectedAnswers: {}, isCorrect: false, marks: new Prisma.Decimal(0), timeTakenSeconds: 60, answeredAt: new Date(), responseVersion: 1 });
 
     const result = await recordAttemptRoute("session-1", "user-1", {
@@ -437,12 +529,16 @@ describe("Practice service", () => {
     expect(result.payload.attempt_id).toBe("attempt-real-1");
     expect(result.payload.question_id).toBe("q-1");
     expect(result.payload.time_taken_seconds).toBe(60);
-    expect(result.payload.is_correct).toBe(false);
-    expect(result.payload.marks).toBe(0);
+    // 42 is the correct answer within tolerance
+    expect(result.payload.is_correct).toBe(true);
+    expect(result.payload.marks).toBe(2);
   });
 
   it("recordAttemptRoute updates existing answer instead of duplicating", async () => {
     findSessionMock.mockResolvedValue(makeSessionWithFrozenPool());
+    getQuestionVersionsWithSnapshotByIdsMock.mockResolvedValue([
+      makeQuestionVersionWithSnapshot("qv-1", makeMCQSnapshot()),
+    ]);
     
     // First call - create
     upsertAnswerMock.mockResolvedValueOnce({ id: "attempt-real-1", sessionId: "session-1", userId: "user-1", questionVersionId: "qv-1", sequence: 1, selectedAnswers: { values: ["A"] }, isCorrect: false, marks: new Prisma.Decimal(0), timeTakenSeconds: 30, answeredAt: new Date(), responseVersion: 1 });

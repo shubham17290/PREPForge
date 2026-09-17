@@ -1,166 +1,174 @@
-// PHASE 8 — Canonical MCQ/MSQ/NAT evaluation (Phase 4 §7).
-// Single source of truth used by attempt recording AND session completion.
-// Grading always runs against the immutable version snapshot (Phase 3 §13.5).
-import { AppError, ErrorDetail, errors } from "../errors";
+// PHASE 12G-T14 — Grading Service
+// Grades practice answers using frozen QuestionVersion snapshots.
+// Never uses live Question/QuestionOption data — only frozen published versions.
 
-export interface SnapshotOption {
-  id: string;
-  body: string;
-  is_correct: boolean;
-}
-
-export interface SnapshotNumericKey {
-  numeric_value: string;
-  tolerance_abs?: string | null;
-  tolerance_rel?: string | null;
-  unit?: string | null;
-}
-
-export interface QuestionSnapshot {
-  question_id: string;
-  type_code: "mcq" | "msq" | "nat";
+export interface GradingInput {
+  questionTypeCode: string;
+  studentAnswer: {
+    selectedAnswers?: string[];
+    numericAnswer?: number | null;
+  };
+  snapshot: Record<string, unknown>;
   marks: number;
-  negative_marks: number | null;
-  options?: SnapshotOption[];
-  numeric_answers?: SnapshotNumericKey[];
+  negativeMarks?: number | null;
 }
 
-/** Type-specific student answer (Phase 4 §3.2.6). */
-export interface AnswerInput {
-  option_id?: unknown;
-  option_ids?: unknown;
-  value?: unknown;
-  unit?: unknown;
-}
-
-export interface GradeResult {
-  isCorrect: boolean;
+export interface GradingResult {
+  correct: boolean;
   marksAwarded: number;
+  negativeMarksApplied: number;
+  details: Record<string, unknown>;
 }
 
-function invalidAnswer(message: string, field = "answer"): never {
-  const details: ErrorDetail[] = [{ field, code: "VALIDATION_INVALID_ANSWER", message }];
-  throw new AppError(422, "INVALID_ANSWER", message, details);
+function getSnapshotValue<T>(snapshot: Record<string, unknown>, key: string): T | undefined {
+  return snapshot[key] as T | undefined;
 }
 
-function negativePenalty(snapshot: QuestionSnapshot): number {
-  return snapshot.negative_marks === null || snapshot.negative_marks === undefined ? 0 : -snapshot.negative_marks;
+function getCorrectOptionIds(snapshot: Record<string, unknown>): string[] {
+  const options = getSnapshotValue<Record<string, unknown>[]>(snapshot, "options");
+  if (!options) return [];
+  return options
+    .filter((opt) => opt.isCorrect === true)
+    .map((opt) => String(opt.id));
 }
 
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
+function getNumericAnswers(snapshot: Record<string, unknown>): Array<{
+  value: number;
+  toleranceAbs: number;
+  toleranceRel: number;
+  unit?: string;
+  precision?: number;
+}> {
+  const numericAnswers = getSnapshotValue<Record<string, unknown>[]>(snapshot, "numericAnswers");
+  if (!numericAnswers) return [];
+  return numericAnswers.map((na) => ({
+    value: Number(na.numericValue),
+    toleranceAbs: Number(na.toleranceAbs ?? 0),
+    toleranceRel: Number(na.toleranceRel ?? 0),
+    unit: na.unit ? String(na.unit) : undefined,
+    precision: na.precision ? Number(na.precision) : undefined,
+  }));
 }
 
-// ─── MCQ (§7.1): exactly one submitted option id ────────────────────────────
-function gradeMcq(snapshot: QuestionSnapshot, answer: AnswerInput): GradeResult {
-  const options = snapshot.options ?? [];
-  const submitted = answer.option_id;
-  if (typeof submitted !== "string" || submitted.length === 0) {
-    invalidAnswer('MCQ answer must be {"option_id": "<uuid>"}.');
+export function gradePracticeAnswer(input: GradingInput): GradingResult {
+  const { questionTypeCode, studentAnswer, snapshot, marks, negativeMarks } = input;
+
+  const negativeMarksValue = negativeMarks !== undefined && negativeMarks !== null ? Number(negativeMarks) : 0;
+
+  // Determine question type from code
+  const isMCQ = questionTypeCode === "mcq";
+  const isMSQ = questionTypeCode === "msq";
+  const isNAT = questionTypeCode === "nat";
+
+  // Unanswered check
+  const isUnanswered = (!studentAnswer.selectedAnswers || studentAnswer.selectedAnswers.length === 0) &&
+    (studentAnswer.numericAnswer === undefined || studentAnswer.numericAnswer === null);
+
+  if (isUnanswered) {
+    return {
+      correct: false,
+      marksAwarded: 0,
+      negativeMarksApplied: 0,
+      details: { reason: "unanswered" },
+    };
   }
-  const chosen = options.find((option) => option.id === submitted);
-  if (!chosen) {
-    invalidAnswer("Submitted option does not belong to this question.");
-  }
-  const isCorrect = chosen.is_correct === true;
-  return { isCorrect, marksAwarded: isCorrect ? round2(snapshot.marks) : negativePenalty(snapshot) };
-}
 
-// ─── MSQ (§7.2): set comparison with partial credit (OD-03 / API-03) ────────
-function gradeMsq(snapshot: QuestionSnapshot, answer: AnswerInput): GradeResult {
-  const options = snapshot.options ?? [];
-  const raw = answer.option_ids;
-  if (!Array.isArray(raw) || raw.length === 0 || raw.some((id) => typeof id !== "string")) {
-    invalidAnswer('MSQ answer must be {"option_ids": ["<uuid>", ...]}.');
-  }
-  const submitted = raw as string[];
-  if (new Set(submitted).size !== submitted.length) {
-    invalidAnswer("MSQ answer must not contain duplicate options.");
-  }
-  const correctSet = new Set(options.filter((option) => option.is_correct).map((option) => option.id));
-  const submittedSet = new Set(submitted);
+  // MCQ Grading: exactly one correct option
+  if (isMCQ) {
+    const correctOptionIds = getCorrectOptionIds(snapshot);
+    const studentSelected = studentAnswer.selectedAnswers || [];
 
-  for (const id of submittedSet) {
-    if (!options.some((option) => option.id === id)) {
-      invalidAnswer("Submitted option does not belong to this question.");
+    const isCorrect = studentSelected.length === 1 &&
+      correctOptionIds.length === 1 &&
+      studentSelected[0] === correctOptionIds[0];
+
+    const marksAwarded = isCorrect ? marks : 0;
+    const negativeMarksApplied = isCorrect ? 0 : negativeMarksValue;
+
+    return {
+      correct: isCorrect,
+      marksAwarded,
+      negativeMarksApplied,
+      details: {
+        correctOptionIds,
+        studentSelected,
+      },
+    };
+  }
+
+  // MSQ Grading: exact set match (all-or-nothing)
+  if (isMSQ) {
+    const correctOptionIds = getCorrectOptionIds(snapshot);
+    const studentSelected = studentAnswer.selectedAnswers || [];
+
+    // Exact set equality
+    const isCorrect = correctOptionIds.length === studentSelected.length &&
+      correctOptionIds.every((id) => studentSelected.includes(id));
+
+    const marksAwarded = isCorrect ? marks : 0;
+    const negativeMarksApplied = isCorrect ? 0 : negativeMarksValue;
+
+    return {
+      correct: isCorrect,
+      marksAwarded,
+      negativeMarksApplied,
+      details: {
+        correctOptionIds,
+        studentSelected,
+      },
+    };
+  }
+
+  // NAT Grading: numeric tolerance
+  if (isNAT) {
+    const numericAnswers = getNumericAnswers(snapshot);
+    const studentValue = studentAnswer.numericAnswer;
+
+    if (studentValue === undefined || studentValue === null) {
+      return {
+        correct: false,
+        marksAwarded: 0,
+        negativeMarksApplied: 0,
+        details: { reason: "no_numeric_answer" },
+      };
     }
-  }
 
-  // Exact-set match → full marks (is_correct true).
-  let hits = 0;
-  for (const id of submittedSet) if (correctSet.has(id)) hits += 1;
-  const exact = submittedSet.size === correctSet.size && hits === correctSet.size;
+    let isCorrect = false;
 
-  if (exact) return { isCorrect: true, marksAwarded: round2(snapshot.marks) };
+    for (const na of numericAnswers) {
+      const absDiff = Math.abs(studentValue - na.value);
+      const withinAbs = absDiff <= na.toleranceAbs;
+      const withinRel = na.value !== 0 && absDiff <= Math.abs(na.value * na.toleranceRel);
 
-  // Proper non-empty subset of the correct set → partial credit (OD-03 default),
-  // proportional floor(|submitted∩correct| / |correct| × marks); API-03 quantum.
-  const properSubset = hits > 0 && submittedSet.size < correctSet.size && hits === submittedSet.size;
-  if (properSubset && correctSet.size > 0) {
-    const partial = round2(Math.floor((hits / correctSet.size) * snapshot.marks * 100) / 100);
-    return { isCorrect: false, marksAwarded: Math.max(0, partial) };
-  }
-
-  return { isCorrect: false, marksAwarded: negativePenalty(snapshot) };
-}
-
-// ─── NAT (§7.3): numeric parse + abs/rel tolerance + optional unit ──────────
-export function normalizeNatValue(raw: string): number {
-  const trimmed = String(raw).trim().replace(/^\+/, "");
-  if (trimmed.length === 0) {
-    invalidAnswer('NAT answer must be {"value": "<number>", "unit"?}.');
-  }
-  const parsed = Number(trimmed);
-  if (!Number.isFinite(parsed)) {
-    invalidAnswer("NAT value must be a finite number (decimals or scientific notation allowed).");
-  }
-  return parsed;
-}
-
-function natMatches(key: SnapshotNumericKey, submittedValue: number, submittedUnit: string | undefined): boolean {
-  const keyValue = Number(key.numeric_value);
-  if (!Number.isFinite(keyValue)) return false;
-
-  if (key.unit !== null && key.unit !== undefined && key.unit.trim() !== "") {
-    if (submittedUnit === undefined || submittedUnit.trim().toUpperCase() !== key.unit.trim().toUpperCase()) {
-      return false;
+      if (withinAbs || withinRel) {
+        isCorrect = true;
+        break;
+      }
     }
+
+    const marksAwarded = isCorrect ? marks : 0;
+    const negativeMarksApplied = isCorrect ? 0 : negativeMarksValue;
+
+    return {
+      correct: isCorrect,
+      marksAwarded,
+      negativeMarksApplied,
+      details: {
+        studentValue,
+        expectedValues: numericAnswers.map((na) => na.value),
+        tolerances: numericAnswers.map((na) => ({
+          absolute: na.toleranceAbs,
+          relative: na.toleranceRel,
+        })),
+      },
+    };
   }
 
-  const diff = Math.abs(submittedValue - keyValue);
-  const tolAbs = key.tolerance_abs === null || key.tolerance_abs === undefined ? 0 : Number(key.tolerance_abs);
-  if (Number.isFinite(tolAbs) && diff <= tolAbs) return true;
-
-  const tolRel = key.tolerance_rel === null || key.tolerance_rel === undefined ? 0 : Number(key.tolerance_rel);
-  if (Number.isFinite(tolRel) && tolRel > 0 && diff <= tolRel * Math.abs(keyValue)) return true;
-
-  return diff === 0;
-}
-
-function gradeNat(snapshot: QuestionSnapshot, answer: AnswerInput): GradeResult {
-  if (typeof answer.value !== "string" && typeof answer.value !== "number") {
-    invalidAnswer('NAT answer must be {"value": "<number>", "unit"?}.');
-  }
-  const value = normalizeNatValue(String(answer.value));
-  const unit = typeof answer.unit === "string" ? answer.unit : undefined;
-
-  const keys = snapshot.numeric_answers ?? [];
-  if (keys.length === 0) {
-    throw errors.internal(); // NAT question without keys is a content defect
-  }
-  const isCorrect = keys.some((key) => natMatches(key, value, unit));
-  return { isCorrect, marksAwarded: isCorrect ? round2(snapshot.marks) : negativePenalty(snapshot) };
-}
-
-export function gradeAnswer(snapshot: QuestionSnapshot, answer: AnswerInput): GradeResult {
-  switch (snapshot.type_code) {
-    case "mcq":
-      return gradeMcq(snapshot, answer);
-    case "msq":
-      return gradeMsq(snapshot, answer);
-    case "nat":
-      return gradeNat(snapshot, answer);
-    default:
-      throw errors.internal();
-  }
+  // Unknown question type
+  return {
+    correct: false,
+    marksAwarded: 0,
+    negativeMarksApplied: 0,
+    details: { reason: "unknown_question_type" },
+  };
 }

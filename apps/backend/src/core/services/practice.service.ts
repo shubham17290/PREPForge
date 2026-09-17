@@ -12,8 +12,10 @@ import {
   findPracticeModeByCode,
   findEligiblePublishedQuestions,
   getQuestionVersionsByIds,
+  getQuestionVersionsWithSnapshotByIds,
 } from "../repositories/practice.repo";
 import type { PracticeSession, Prisma } from "@prisma/client";
+import { gradePracticeAnswer } from "../grading/grading.service";
 
 
 const STATUS = {
@@ -303,7 +305,7 @@ export async function recordAttemptRoute(sessionId: string, userId: string, inpu
   const questionNumber = poolEntry.questionNumber;
   const sequence = poolEntry.sequence;
 
-  // Extract answer based on type - for now we just persist, no grading
+  // Extract answer based on type
   const answer = input.answer;
   let selectedAnswers: string[] | undefined;
   let numericAnswer: number | null | undefined;
@@ -318,6 +320,38 @@ export async function recordAttemptRoute(sessionId: string, userId: string, inpu
     }
   }
 
+  // Fetch the QuestionVersion with full snapshot for grading (uses frozen published version)
+  const questionVersions = await getQuestionVersionsWithSnapshotByIds([questionVersionId]);
+  const questionVersion = questionVersions[0];
+
+  if (!questionVersion) {
+    throw errors.notFound("QUESTION_VERSION_NOT_FOUND", `Question version ${questionVersionId} not found`);
+  }
+
+  // Get question type from snapshot
+  const snapshot = questionVersion.snapshot as Record<string, unknown>;
+  const questionType = getQuestionType(snapshot);
+
+  if (!questionType) {
+    throw errors.conflict("INVALID_QUESTION_TYPE", "Question type not found in snapshot");
+  }
+
+  // Get marks and negativeMarks from snapshot
+  const marks = Number(getSnapshotValue<number>(snapshot, "marks") ?? 1);
+  const negativeMarks = getSnapshotValue<number>(snapshot, "negativeMarks");
+
+  // Grade the answer
+  const gradingResult = gradePracticeAnswer({
+    questionTypeCode: questionType.code,
+    studentAnswer: {
+      selectedAnswers,
+      numericAnswer,
+    },
+    snapshot,
+    marks,
+    negativeMarks,
+  });
+
   const upsertInput: Parameters<typeof upsertAnswer>[0] = {
     sessionId,
     userId,
@@ -330,21 +364,38 @@ export async function recordAttemptRoute(sessionId: string, userId: string, inpu
     selectedAnswers,
     numericAnswer,
     timeTakenSeconds: input.time_taken_seconds,
+    isCorrect: gradingResult.correct,
+    marks: gradingResult.marksAwarded,
+    negativeMarksApplied: gradingResult.negativeMarksApplied,
   };
 
   // Persist and get the actual attempt back
   const attempt = await upsertAnswer(upsertInput);
 
-  // Return real attempt data
+  // Return real attempt data with grading result
   return {
     created: true,
     payload: {
       attempt_id: attempt.id,
       question_id: input.question_id,
-      is_correct: false, // no grading in this phase
-      marks: 0,
+      is_correct: gradingResult.correct,
+      marks: gradingResult.marksAwarded,
       time_taken_seconds: input.time_taken_seconds,
     },
+  };
+}
+
+// Helper functions to extract data from QuestionVersion snapshot
+function getSnapshotValue<T>(snapshot: Record<string, unknown>, key: string): T | undefined {
+  return snapshot[key] as T | undefined;
+}
+
+function getQuestionType(snapshot: Record<string, unknown>): { code: string; supportsMultiple?: boolean } | undefined {
+  const qt = getSnapshotValue<Record<string, unknown>>(snapshot, "questionType");
+  if (!qt) return undefined;
+  return {
+    code: String(qt.code),
+    supportsMultiple: qt.supportsMultiple as boolean | undefined,
   };
 }
 
