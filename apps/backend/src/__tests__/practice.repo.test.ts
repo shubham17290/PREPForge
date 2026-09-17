@@ -4,12 +4,14 @@ import { Prisma } from "@prisma/client";
 const db = vi.hoisted(() => ({
   practiceSession: { create: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
   attempt: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), findMany: vi.fn() },
+  questionVersion: { findMany: vi.fn() },
   $transaction: vi.fn(),
 }));
 vi.mock("../core/repositories/prisma", () => ({ prisma: db }));
 import {
   createSession, findSessionByIdAndOwner, updateSessionStatus,
   upsertAnswer, listAnswersForSession, parseSessionConfig,
+  getQuestionVersionsByIds, getMaxPossibleMarks,
 } from "../core/repositories/practice.repo";
 
 const input = {
@@ -107,5 +109,36 @@ describe("Practice repository compatibility", () => {
       mode: "default", filters: {}, question_count: 0, pool: null, selectionMetadata: { shift: 2 },
     });
     expect(() => parseSessionConfig(null)).toThrow("Invalid session config");
+  });
+
+  it("getQuestionVersionsByIds returns all options ordered by sortOrder without filtering correct answers (F1)", async () => {
+    db.questionVersion.findMany.mockResolvedValue([]);
+    expect(await getQuestionVersionsByIds(["qv-1", "qv-2"])).toEqual([]);
+    expect(db.questionVersion.findMany).toHaveBeenCalledWith({
+      where: { id: { in: ["qv-1", "qv-2"] } },
+      include: {
+        question: {
+          include: {
+            options: { orderBy: { sortOrder: "asc" } },
+            numericAnswers: false,
+            questionType: true,
+          },
+        },
+      },
+    });
+  });
+
+  it("getMaxPossibleMarks sums frozen snapshot marks not live Question.marks (F2)", async () => {
+    db.questionVersion.findMany.mockResolvedValue([
+      { snapshot: { marks: 2 } },
+      { snapshot: { marks: 1.5 } },
+      { snapshot: { marks: 1 } },
+    ] as unknown as never);
+    const result = await getMaxPossibleMarks(["qv-1", "qv-2", "qv-3"]);
+    expect(result.equals(new Prisma.Decimal(4.5))).toBe(true);
+    expect(db.questionVersion.findMany).toHaveBeenCalledWith({
+      where: { id: { in: ["qv-1", "qv-2", "qv-3"] } },
+      select: { snapshot: true },
+    });
   });
 });

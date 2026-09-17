@@ -201,7 +201,6 @@ export function getQuestionVersionsByIds(questionVersionIds: string[]) {
       question: {
         include: {
           options: {
-            where: { isCorrect: false }, // Never expose correct answers to students
             orderBy: { sortOrder: "asc" },
           },
           numericAnswers: false, // Never expose numeric answers/tolerance to students
@@ -252,9 +251,13 @@ export function getMaxPossibleMarks(frozenQuestionVersionIds: string[]) {
   if (frozenQuestionVersionIds.length === 0) return new Prisma.Decimal(0);
   return prisma.questionVersion.findMany({
     where: { id: { in: frozenQuestionVersionIds } },
-    select: { question: { select: { marks: true } } },
+    select: { snapshot: true },
   }).then(versions => {
-    const total = versions.reduce((sum, v) => sum + Number(v.question.marks), 0);
+    const total = versions.reduce((sum, v) => {
+      const snap = v.snapshot as unknown as Record<string, unknown>;
+      const marks = Number(snap?.marks ?? 0);
+      return sum + marks;
+    }, 0);
     return new Prisma.Decimal(total);
   });
 }
