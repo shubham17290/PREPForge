@@ -329,6 +329,7 @@ export async function recordAttemptRoute(sessionId: string, userId: string, inpu
     markedForReview: false,
     selectedAnswers,
     numericAnswer,
+    timeTakenSeconds: input.time_taken_seconds,
   };
 
   // Persist and get the actual attempt back

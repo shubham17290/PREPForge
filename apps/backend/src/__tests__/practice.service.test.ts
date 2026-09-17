@@ -396,6 +396,112 @@ describe("Practice service", () => {
     expect(upsertAnswerMock).not.toHaveBeenCalled();
   });
 
+  // Additional recordAttemptRoute tests for Phase 12G-T13
+  it("recordAttemptRoute accepts valid MSQ answer (option_ids array)", async () => {
+    findSessionMock.mockResolvedValue(makeSessionWithFrozenPool());
+    upsertAnswerMock.mockResolvedValue({ id: "attempt-real-1", sessionId: "session-1", userId: "user-1", questionVersionId: "qv-1", sequence: 1, selectedAnswers: {}, isCorrect: false, marks: new Prisma.Decimal(0), timeTakenSeconds: 45, answeredAt: new Date(), responseVersion: 1 });
+
+    const result = await recordAttemptRoute("session-1", "user-1", {
+      question_id: "q-1",
+      answer: { option_ids: ["A", "C"] },
+      time_taken_seconds: 45,
+    });
+
+    expect(upsertAnswerMock).toHaveBeenCalledWith(expect.objectContaining({
+      questionVersionId: "qv-1",
+      selectedAnswers: ["A", "C"],
+      numericAnswer: undefined,
+    }));
+    expect(result.payload.attempt_id).toBe("attempt-real-1");
+    expect(result.payload.question_id).toBe("q-1");
+    expect(result.payload.time_taken_seconds).toBe(45);
+    expect(result.payload.is_correct).toBe(false);
+    expect(result.payload.marks).toBe(0);
+  });
+
+  it("recordAttemptRoute accepts valid NAT answer (numeric value)", async () => {
+    findSessionMock.mockResolvedValue(makeSessionWithFrozenPool());
+    upsertAnswerMock.mockResolvedValue({ id: "attempt-real-1", sessionId: "session-1", userId: "user-1", questionVersionId: "qv-1", sequence: 1, selectedAnswers: {}, isCorrect: false, marks: new Prisma.Decimal(0), timeTakenSeconds: 60, answeredAt: new Date(), responseVersion: 1 });
+
+    const result = await recordAttemptRoute("session-1", "user-1", {
+      question_id: "q-1",
+      answer: { value: 42 },
+      time_taken_seconds: 60,
+    });
+
+    expect(upsertAnswerMock).toHaveBeenCalledWith(expect.objectContaining({
+      questionVersionId: "qv-1",
+      selectedAnswers: undefined,
+      numericAnswer: 42,
+    }));
+    expect(result.payload.attempt_id).toBe("attempt-real-1");
+    expect(result.payload.question_id).toBe("q-1");
+    expect(result.payload.time_taken_seconds).toBe(60);
+    expect(result.payload.is_correct).toBe(false);
+    expect(result.payload.marks).toBe(0);
+  });
+
+  it("recordAttemptRoute updates existing answer instead of duplicating", async () => {
+    findSessionMock.mockResolvedValue(makeSessionWithFrozenPool());
+    
+    // First call - create
+    upsertAnswerMock.mockResolvedValueOnce({ id: "attempt-real-1", sessionId: "session-1", userId: "user-1", questionVersionId: "qv-1", sequence: 1, selectedAnswers: { values: ["A"] }, isCorrect: false, marks: new Prisma.Decimal(0), timeTakenSeconds: 30, answeredAt: new Date(), responseVersion: 1 });
+    // Second call - update (simulating upsert returning updated record)
+    upsertAnswerMock.mockResolvedValueOnce({ id: "attempt-real-1", sessionId: "session-1", userId: "user-1", questionVersionId: "qv-1", sequence: 1, selectedAnswers: { values: ["B"] }, isCorrect: false, marks: new Prisma.Decimal(0), timeTakenSeconds: 40, answeredAt: new Date(), responseVersion: 1 });
+
+    // First submission
+    const result1 = await recordAttemptRoute("session-1", "user-1", {
+      question_id: "q-1",
+      answer: { option_id: "A" },
+      time_taken_seconds: 30,
+    });
+    expect(result1.payload.attempt_id).toBe("attempt-real-1");
+    expect(upsertAnswerMock).toHaveBeenCalledTimes(1);
+
+    // Second submission for same question - should update, not create duplicate
+    const result2 = await recordAttemptRoute("session-1", "user-1", {
+      question_id: "q-1",
+      answer: { option_id: "B" },
+      time_taken_seconds: 40,
+    });
+    expect(result2.payload.attempt_id).toBe("attempt-real-1");
+    expect(upsertAnswerMock).toHaveBeenCalledTimes(2);
+    
+    // Verify the second call had the updated answer - check the mock calls directly
+    const secondCall = upsertAnswerMock.mock.calls[1][0];
+    expect(secondCall.questionVersionId).toBe("qv-1");
+    expect(secondCall.selectedAnswers).toEqual(["B"]);
+    expect(secondCall.timeTakenSeconds).toBe(40);
+  });
+
+  it("recordAttemptRoute rejects non-owner access", async () => {
+    findSessionMock.mockResolvedValue(null);
+
+    await expect(recordAttemptRoute("session-1", "other-user", {
+      question_id: "q-1",
+      answer: { option_id: "A" },
+      time_taken_seconds: 30,
+    })).rejects.toMatchObject({ code: "SESSION_NOT_FOUND" });
+
+    expect(upsertAnswerMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["submitted", "SUBMITTED_SESSION_IMMUTABLE"],
+    ["completed", "SUBMITTED_SESSION_IMMUTABLE"],
+    ["abandoned", "SUBMITTED_SESSION_IMMUTABLE"],
+  ])("recordAttemptRoute rejects %s sessions", async (status, code) => {
+    findSessionMock.mockResolvedValue(makeSessionWithFrozenPool({ status }));
+
+    await expect(recordAttemptRoute("session-1", "user-1", {
+      question_id: "q-1",
+      answer: { option_id: "A" },
+      time_taken_seconds: 30,
+    })).rejects.toMatchObject({ code });
+
+    expect(upsertAnswerMock).not.toHaveBeenCalled();
+  });
+
   // getSessionQuestions tests
   it("getSessionQuestions returns frozen questions with student-safe data", async () => {
     const sessionWithPool = makeSessionWithFrozenPool();
