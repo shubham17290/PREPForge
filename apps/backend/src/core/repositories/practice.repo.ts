@@ -66,6 +66,13 @@ export function updateSessionStatus(sessionId: string, status: string, userId: s
   return prisma.practiceSession.update({ where: { id: sessionId, userId }, data: { status } });
 }
 
+export function completeSession(sessionId: string, userId: string) {
+  return prisma.practiceSession.update({
+    where: { id: sessionId, userId },
+    data: { status: "completed", endedAt: new Date() },
+  });
+}
+
 export interface AnswerUpsertInput {
   sessionId: string;
   userId: string;
