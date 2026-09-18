@@ -338,9 +338,11 @@ export async function recordAttemptRoute(sessionId: string, userId: string, inpu
     throw errors.conflict("INVALID_QUESTION_TYPE", "Question type not found in snapshot");
   }
 
-  // Get marks and negativeMarks from snapshot
+  // Get marks and negativeMarks from snapshot (support snake_case persisted shape)
   const marks = Number(getSnapshotValue<number>(snapshot, "marks") ?? 1);
-  const negativeMarks = getSnapshotValue<number>(snapshot, "negativeMarks");
+  const negativeMarks =
+    getSnapshotValue<number>(snapshot, "negativeMarks") ??
+    getSnapshotValue<number>(snapshot, "negative_marks");
 
   // Grade the answer
   const gradingResult = gradePracticeAnswer({
@@ -394,18 +396,25 @@ function getSnapshotValue<T>(snapshot: Record<string, unknown>, key: string): T 
 
 function getQuestionType(snapshot: Record<string, unknown>): { code: string; supportsMultiple?: boolean } | undefined {
   const qt = getSnapshotValue<Record<string, unknown>>(snapshot, "questionType");
-  if (!qt) return undefined;
-  return {
-    code: String(qt.code),
-    supportsMultiple: qt.supportsMultiple as boolean | undefined,
-  };
+  if (qt && qt.code) {
+    return {
+      code: String(qt.code),
+      supportsMultiple: qt.supportsMultiple as boolean | undefined,
+    };
+  }
+  // snake_case fallback: publish/seed snapshots store `type_code` string (e.g., "mcq")
+  const typeCodeSnake = getSnapshotValue<string>(snapshot, "type_code") ?? getSnapshotValue<string>(snapshot, "typeCode");
+  if (typeCodeSnake) {
+    return { code: String(typeCodeSnake), supportsMultiple: undefined };
+  }
+  return undefined;
 }
 
 function getCorrectOptionIds(snapshot: Record<string, unknown>): string[] {
   const options = getSnapshotValue<Record<string, unknown>[]>(snapshot, "options");
   if (!options) return [];
   return options
-    .filter((opt) => opt.isCorrect === true)
+    .filter((opt) => opt.isCorrect === true || (opt as Record<string, unknown>).is_correct === true)
     .map((opt) => String(opt.id));
 }
 
@@ -416,12 +425,14 @@ function getNumericAnswers(snapshot: Record<string, unknown>): Array<{
   unit?: string;
   precision?: number;
 }> {
-  const numericAnswers = getSnapshotValue<Record<string, unknown>[]>(snapshot, "numericAnswers");
+  const numericAnswers =
+    getSnapshotValue<Record<string, unknown>[]>(snapshot, "numericAnswers") ??
+    getSnapshotValue<Record<string, unknown>[]>(snapshot, "numeric_answers");
   if (!numericAnswers) return [];
   return numericAnswers.map((na) => ({
-    value: Number(na.numericValue),
-    toleranceAbs: Number(na.toleranceAbs ?? 0),
-    toleranceRel: Number(na.toleranceRel ?? 0),
+    value: Number((na.numericValue ?? (na as Record<string, unknown>).numeric_value) as unknown),
+    toleranceAbs: Number((na.toleranceAbs ?? (na as Record<string, unknown>).tolerance_abs ?? 0) as unknown),
+    toleranceRel: Number((na.toleranceRel ?? (na as Record<string, unknown>).tolerance_rel ?? 0) as unknown),
     unit: na.unit ? String(na.unit) : undefined,
     precision: na.precision ? Number(na.precision) : undefined,
   }));

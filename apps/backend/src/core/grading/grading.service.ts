@@ -28,7 +28,7 @@ function getCorrectOptionIds(snapshot: Record<string, unknown>): string[] {
   const options = getSnapshotValue<Record<string, unknown>[]>(snapshot, "options");
   if (!options) return [];
   return options
-    .filter((opt) => opt.isCorrect === true)
+    .filter((opt) => opt.isCorrect === true || (opt as Record<string, unknown>).is_correct === true)
     .map((opt) => String(opt.id));
 }
 
@@ -39,12 +39,14 @@ function getNumericAnswers(snapshot: Record<string, unknown>): Array<{
   unit?: string;
   precision?: number;
 }> {
-  const numericAnswers = getSnapshotValue<Record<string, unknown>[]>(snapshot, "numericAnswers");
+  const numericAnswers =
+    getSnapshotValue<Record<string, unknown>[]>(snapshot, "numericAnswers") ??
+    getSnapshotValue<Record<string, unknown>[]>(snapshot, "numeric_answers");
   if (!numericAnswers) return [];
   return numericAnswers.map((na) => ({
-    value: Number(na.numericValue),
-    toleranceAbs: Number(na.toleranceAbs ?? 0),
-    toleranceRel: Number(na.toleranceRel ?? 0),
+    value: Number((na.numericValue ?? (na as Record<string, unknown>).numeric_value) as unknown),
+    toleranceAbs: Number((na.toleranceAbs ?? (na as Record<string, unknown>).tolerance_abs ?? 0) as unknown),
+    toleranceRel: Number((na.toleranceRel ?? (na as Record<string, unknown>).tolerance_rel ?? 0) as unknown),
     unit: na.unit ? String(na.unit) : undefined,
     precision: na.precision ? Number(na.precision) : undefined,
   }));
