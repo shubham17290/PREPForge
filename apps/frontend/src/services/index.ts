@@ -14,6 +14,7 @@ import type {
   Paginated,
   PerformanceOverview,
   PublicQuestion,
+  SessionQuestion,
   SessionResult,
   SessionState,
   SubjectPerformance,
@@ -84,6 +85,7 @@ export const practiceService = {
     api.post<CreatedSession>("/practice-sessions", body),
   start: (sessionId: string) => api.post<SessionState>(`/practice-sessions/${sessionId}/start`),
   state: (sessionId: string) => api.get<SessionState>(`/practice-sessions/${sessionId}`),
+  questions: (sessionId: string) => api.get<SessionQuestion[]>(`/practice-sessions/${sessionId}/questions`),
   attempt: (
     sessionId: string,
     body: { question_id: string; answer: Record<string, unknown>; time_taken_seconds: number },

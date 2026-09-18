@@ -57,10 +57,49 @@ export function PracticeSessionPage({ sessionId }: { sessionId: string }) {
         }
         throw error;
       }
-      setState(sessionState);
+
+      // Fallback: backend may return SessionDTO without questions/attempts (legacy contract).
+      // If questions missing, fetch via dedicated questions endpoint and map backend DTO → frontend SessionQuestion.
+      let normalizedQuestions: SessionState["questions"] = (sessionState.questions as unknown as SessionState["questions"] | undefined) ?? [];
+      const rawQuestions = sessionState.questions as unknown as Array<Record<string, unknown>> | undefined;
+      const needsFetch = !Array.isArray(rawQuestions) || rawQuestions.length === 0;
+      if (needsFetch) {
+        try {
+          const fetched = await practiceService.questions(sessionId);
+          // Map backend SessionQuestionDTO (questionId, questionType, etc.) → frontend SessionQuestion (id, type_code, gate_year)
+          normalizedQuestions = (fetched as unknown as Array<Record<string, unknown>>).map((q) => ({
+            id: (q.id ?? q.questionId ?? q.question_id) as string,
+            body: q.body as string,
+            type_code: (q.type_code ?? q.questionType ?? "mcq") as SessionState["questions"][number]["type_code"],
+            marks: q.marks as number,
+            difficulty: q.difficulty as string,
+            gate_year: (q.gate_year ?? (q as Record<string, unknown>).gateYear ?? 2099) as number,
+            options: (q.options as SessionState["questions"][number]["options"]) ?? [],
+          })) as unknown as SessionState["questions"];
+          // Patch sessionState for downstream
+          (sessionState as unknown as Record<string, unknown>).questions = normalizedQuestions;
+        } catch {
+          normalizedQuestions = [];
+        }
+      } else if (rawQuestions && rawQuestions.length > 0 && !(rawQuestions[0] as Record<string, unknown>).id) {
+        // Normalize shape: backend may use questionId / questionType
+        normalizedQuestions = rawQuestions.map((q) => ({
+          id: (q.id ?? q.questionId ?? q.question_id) as string,
+          body: q.body as string,
+          type_code: (q.type_code ?? q.questionType ?? "mcq") as SessionState["questions"][number]["type_code"],
+          marks: q.marks as number,
+          difficulty: q.difficulty as string,
+          gate_year: (q.gate_year ?? (q as Record<string, unknown>).gateYear ?? 2099) as number,
+          options: (q.options as SessionState["questions"][number]["options"]) ?? [],
+        })) as unknown as SessionState["questions"];
+        (sessionState as unknown as Record<string, unknown>).questions = normalizedQuestions;
+      }
+
+      const attemptsArray = (sessionState.attempts as unknown as SessionState["attempts"] | undefined) ?? [];
+      setState({ ...sessionState, questions: normalizedQuestions, attempts: attemptsArray } as SessionState);
 
       const resultsMap: Record<string, AttemptResponse> = {};
-      for (const attempt of sessionState.attempts) {
+      for (const attempt of attemptsArray) {
         if (attempt.question_id) {
           resultsMap[attempt.question_id] = {
             attempt_id: attempt.attempt_id,
@@ -75,7 +114,7 @@ export function PracticeSessionPage({ sessionId }: { sessionId: string }) {
 
       // Enrich header badges (subject/topic) from public question details.
       const details = await Promise.allSettled(
-        sessionState.questions.map((item) => questionsService.get(item.id))
+        (normalizedQuestions as unknown as Array<{ id: string }>).map((item) => questionsService.get((item as unknown as { id: string }).id))
       );
       const metaMap: Record<string, PublicQuestion> = {};
       details.forEach((entry) => {
@@ -122,7 +161,8 @@ export function PracticeSessionPage({ sessionId }: { sessionId: string }) {
 
   async function persistAnswer() {
     if (!state || !question) return;
-    const draft = drafts[question.id];
+    const qid = (question as unknown as Record<string, unknown>).id ?? (question as unknown as Record<string, unknown>).questionId;
+    const draft = drafts[qid as string];
     if (!draft) {
       notify("Select an answer first", "error");
       return;
@@ -133,8 +173,9 @@ export function PracticeSessionPage({ sessionId }: { sessionId: string }) {
         3600,
         Math.max(0, Math.floor((now - questionStartRef.current) / 1000))
       );
-      const result = await practiceService.attempt(state.session_id, {
-        question_id: question.id,
+      const sid = (state as unknown as Record<string, unknown>).session_id ?? (state as unknown as Record<string, unknown>).id ?? (state as unknown as Record<string, unknown>).sessionId;
+      const result = await practiceService.attempt(sid as string, {
+        question_id: qid as string,
         answer: draft as Record<string, unknown>,
         time_taken_seconds: elapsed,
       });
